@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STL Gyroscope Viewer</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: rgba(15, 23, 42, 0.85);
+        --panel-border: rgba(148, 163, 184, 0.2);
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #7dd3fc;
+        --accent-2: #a78bfa;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Arial, Helvetica, sans-serif;
+        overflow: hidden;
+      }
+
+      #app {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at center, #111827, #0b1020 42%, #070b14 100%);
+      }
+
+      .ui {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-width: min(420px, calc(100vw - 32px));
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+        padding: 12px 14px;
+        backdrop-filter: blur(8px);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 18px;
+        letter-spacing: 0.04em;
+      }
+
+      .muted {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      input[type="file"] {
+        color: var(--text);
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+
+      button, input[type="text"] {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+        border: none;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        color: #05111c;
+        font-weight: 700;
+      }
+
+      button.secondary {
+        background: rgba(15, 23, 42, 0.9);
+        color: var(--text);
+        border: 1px solid var(--panel-border);
+      }
+
+      .gyro-box {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .gyro-box .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        min-width: 180px;
+        background: rgba(15, 23, 42, 0.82);
+        color: var(--text);
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        padding: 9px 10px;
+      }
+
+      .status {
+        margin-top: 4px;
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .status strong {
+        color: var(--accent);
+      }
+
+      @media (max-width: 640px) {
+        .ui {
+          top: 10px;
+          left: 10px;
+          right: 10px;
+          max-width: none;
+        }
+
+        .controls, .row {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="ui">
+        <div class="panel">
+          <h1>STL Gyroscope Viewer</h1>
+          <p class="muted">Upload an STL file or keep the default cube. Gyroscope input rotates the model.</p>
+        </div>
+
+        <div class="panel">
+          <div class="controls">
+            <input id="fileInput" type="file" accept=".stl,.STL" />
+            <button id="resetModelButton" class="secondary">Reset Model</button>
+          </div>
+        </div>
+
+        <div class="panel gyro-box">
+          <div class="row">
+            <button id="gyroDeviceButton">Use Device Gyroscope</button>
+            <button id="connectWebSocketButton" class="secondary">Connect ESP32 WebSocket</button>
+          </div>
+
+          <div class="row">
+            <input id="wsInput" type="text" value="ws://esp32.local:81" placeholder="ws://esp32.local:81" />
+          </div>
+
+          <div class="status" id="statusText">
+            Source: <strong>Default cube</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+      import { STLLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/STLLoader.js';
+
+      const app = document.getElementById('app');
+      const fileInput = document.getElementById('fileInput');
+      const resetModelButton = document.getElementById('resetModelButton');
+      const gyroDeviceButton = document.getElementById('gyroDeviceButton');
+      const connectWebSocketButton = document.getElementById('connectWebSocketButton');
+      const wsInput = document.getElementById('wsInput');
+      const statusText = document.getElementById('statusText');
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0b1020);
+
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 180);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      app.appendChild(renderer.domElement);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+      scene.add(ambientLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      keyLight.position.set(60, 80, 100);
+      scene.add(keyLight);
+
+      const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.7);
+      rimLight.position.set(-50, -30, -60);
+      scene.add(rimLight);
+
+      const rootGroup = new THREE.Group();
+      scene.add(rootGroup);
+
+      const defaultMaterial = new THREE.MeshPhongMaterial({
+        color: 0x8ec5ff,
+        emissive: 0x0d1d2b,
+        shininess: 80,
+        side: THREE.DoubleSide
+      });
+
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40), defaultMaterial.clone());
+      cube.rotation.x = 0.6;
+      cube.rotation.y = 0.8;
+      rootGroup.add(cube);
+
+      let currentModel = cube;
+      let currentMesh = cube;
+      let currentSource = 'default cube';
+
+      let websocket = null;
+      let socketConnected = false;
+
+      const gyroState = {
+        roll: 0,
+        pitch: 0,
+        yaw: 0,
+        active: false,
+        source: 'default'
+      };
+
+      function setStatus(text) {
+        statusText.innerHTML = text;
+      }
+
+      function resetModelToCube() {
+        if (currentMesh !== cube) {
+          rootGroup.remove(currentMesh);
+        }
+
+        currentMesh = cube;
+        currentModel = cube;
+        currentSource = 'default cube';
+
+        cube.visible = true;
+        cube.rotation.set(0.6, 0.8, 0);
+        rootGroup.position.set(0, 0, 0);
+        rootGroup.rotation.set(0, 0, 0);
+
+        setStatus('Source: <strong>Default cube</strong>');
+      }
+
+      function loadSTLFromBuffer(name, arrayBuffer) {
+        try {
+          const loader = new STLLoader();
+          const geometry = loader.parse(arrayBuffer);
+          geometry.computeVertexNormals();
+
+          if (currentMesh !== cube) {
+            rootGroup.remove(currentMesh);
+          }
+
+          const material = defaultMaterial.clone();
+          material.color = new THREE.Color(0x8ec5ff);
+
+          const mesh = new THREE.Mesh(geometry, material);
+
+          const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          const scale = 100 / maxDim;
+
+          mesh.scale.setScalar(scale);
+          mesh.position.sub(center.multiplyScalar(scale));
+          mesh.rotation.x = -Math.PI / 2;
+
+          rootGroup.add(mesh);
+          currentMesh = mesh;
+          currentModel = mesh;
+          currentSource = name;
+
+          cube.visible = false;
+          setStatus('Source: <strong>' + name + '</strong>');
+        } catch (err) {
+          console.error('STL parsing failed:', err);
+          alert('Could not load STL file. Please try another file.');
+          resetModelToCube();
+        }
+      }
+
+      fileInput.addEventListener('change', (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          loadSTLFromBuffer(file.name, e.target.result);
+        };
+        reader.readAsArrayBuffer(file);
+      });
+
+      resetModelButton.addEventListener('click', () => {
+        resetModelToCube();
+      });
+
+      function setGyroTargetFromOrientation(beta, gamma, alpha = 0) {
+        if (beta === null || gamma === null) return;
+
+        const rollRad = THREE.MathUtils.degToRad(beta * 0.9);
+        const pitchRad = THREE.MathUtils.degToRad(gamma * 0.9);
+        const yawRad = THREE.MathUtils.degToRad(alpha * 0.35);
+
+        gyroState.roll = rollRad;
+        gyroState.pitch = pitchRad;
+        gyroState.yaw = yawRad;
+        gyroState.active = true;
+        gyroState.source = 'device orientation';
+      }
+
+      function enableDeviceGyro() {
+        if (typeof DeviceOrientationEvent === 'undefined') {
+          setStatus('Source: <strong>Gyroscope not supported</strong>');
+          return;
+        }
+
+        const requestPermission = DeviceOrientationEvent.requestPermission;
+
+        const doEnable = () => {
+          window.addEventListener('deviceorientation', (event) => {
+            const beta = event.beta ?? 0;
+            const gamma = event.gamma ?? 0;
+            const alpha = event.alpha ?? 0;
+            setGyroTargetFromOrientation(beta, gamma, alpha);
+            setStatus('Source: <strong>Device gyroscope</strong>');
+          }, true);
+
+          setStatus('Source: <strong>Device gyroscope</strong>');
+        };
+
+        if (typeof requestPermission === 'function') {
+          requestPermission()
+            .then((response) => {
+              if (response === 'granted') doEnable();
+              else setStatus('Source: <strong>Gyroscope permission denied</strong>');
+            })
+            .catch(() => setStatus('Source: <strong>Gyroscope permission denied</strong>'));
+        } else {
+          doEnable();
+        }
+      }
+
+      gyroDeviceButton.addEventListener('click', enableDeviceGyro);
+
+      function connectESP32WebSocket() {
+        const url = wsInput.value.trim();
+        if (!url) {
+          setStatus('Source: <strong>Enter a WebSocket URL first</strong>');
+          return;
+        }
+
+        try {
+          if (websocket) {
+            websocket.close();
+          }
+
+          websocket = new WebSocket(url);
+
+          websocket.onopen = () => {
+            socketConnected = true;
+            setStatus('Source: <strong>ESP32 WebSocket connected</strong>');
+          };
+
+          websocket.onclose = () => {
+            socketConnected = false;
+            setStatus('Source: <strong>ESP32 WebSocket disconnected</strong>');
+          };
+
+          websocket.onerror = () => {
+            socketConnected = false;
+            setStatus('Source: <strong>ESP32 WebSocket error</strong>');
+          };
+
+          websocket.onmessage = (event) => {
+            try {
+              const parsed = JSON.parse(event.data);
+              const roll = Number(parsed.roll ?? parsed.x ?? 0);
+              const pitch = Number(parsed.pitch ?? parsed.y ?? 0);
+              const yaw = Number(parsed.yaw ?? parsed.z ?? 0);
+
+              gyroState.roll = THREE.MathUtils.degToRad(roll);
+              gyroState.pitch = THREE.MathUtils.degToRad(pitch);
+              gyroState.yaw = THREE.MathUtils.degToRad(yaw);
+              gyroState.active = true;
+              gyroState.source = 'ESP32 gyroscope';
+              setStatus('Source: <strong>ESP32 gyroscope</strong>');
+            } catch (err) {
+              console.warn('Invalid WebSocket payload:', event.data);
+            }
+          };
+        } catch (err) {
+          console.error('WebSocket connection failed:', err);
+          setStatus('Source: <strong>WebSocket connection failed</strong>');
+        }
+      }
+
+      connectWebSocketButton.addEventListener('click', connectESP32WebSocket);
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (gyroState.active) {
+          const drag = 0.08;
+          rootGroup.rotation.x += (gyroState.roll - rootGroup.rotation.x) * drag;
+          rootGroup.rotation.y += (gyroState.pitch - rootGroup.rotation.y) * drag;
+          rootGroup.rotation.z += (gyroState.yaw - rootGroup.rotation.z) * drag;
+        } else {
+          rootGroup.rotation.x += 0.005;
+          rootGroup.rotation.y += 0.01;
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      window.addEventListener('resize', onResize);
+      animate();
+      setStatus('Source: <strong>Default cube</strong>');
+    </script>
+  </body>
+</html>

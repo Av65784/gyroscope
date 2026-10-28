@@ -114,21 +114,11 @@
         gap: 8px;
       }
 
-      .gyro-box .row {
+      .row {
         display: flex;
         gap: 8px;
         align-items: center;
         flex-wrap: wrap;
-      }
-
-      input[type="text"] {
-        flex: 1;
-        min-width: 180px;
-        background: rgba(15, 23, 42, 0.82);
-        color: var(--text);
-        border: 1px solid var(--panel-border);
-        border-radius: 10px;
-        padding: 9px 10px;
       }
 
       .status {
@@ -162,7 +152,7 @@
       <div class="ui">
         <div class="panel">
           <h1>STL Gyroscope Viewer</h1>
-          <p class="muted">Upload an STL file or keep the default cube. Gyroscope input rotates the model.</p>
+          <p class="muted">Upload an STL file or keep the default cube. Rotation can come from device gyroscope or an ESP32 connected over USB.</p>
         </div>
 
         <div class="panel">
@@ -175,11 +165,8 @@
         <div class="panel gyro-box">
           <div class="row">
             <button id="gyroDeviceButton">Use Device Gyroscope</button>
-            <button id="connectWebSocketButton" class="secondary">Connect ESP32 WebSocket</button>
-          </div>
-
-          <div class="row">
-            <input id="wsInput" type="text" value="ws://esp32.local:81" placeholder="ws://esp32.local:81" />
+            <button id="usbConnectButton">Connect USB</button>
+            <button id="usbDisconnectButton" class="secondary">Disconnect USB</button>
           </div>
 
           <div class="status" id="statusText">
@@ -197,8 +184,8 @@
       const fileInput = document.getElementById('fileInput');
       const resetModelButton = document.getElementById('resetModelButton');
       const gyroDeviceButton = document.getElementById('gyroDeviceButton');
-      const connectWebSocketButton = document.getElementById('connectWebSocketButton');
-      const wsInput = document.getElementById('wsInput');
+      const usbConnectButton = document.getElementById('usbConnectButton');
+      const usbDisconnectButton = document.getElementById('usbDisconnectButton');
       const statusText = document.getElementById('statusText');
 
       const scene = new THREE.Scene();
@@ -238,20 +225,19 @@
       cube.rotation.y = 0.8;
       rootGroup.add(cube);
 
-      let currentModel = cube;
       let currentMesh = cube;
-      let currentSource = 'default cube';
-
-      let websocket = null;
-      let socketConnected = false;
+      let defaultCubeVisible = true;
 
       const gyroState = {
         roll: 0,
         pitch: 0,
         yaw: 0,
-        active: false,
-        source: 'default'
+        active: false
       };
+
+      let usbPort = null;
+      let usbReader = null;
+      let usbBuffer = '';
 
       function setStatus(text) {
         statusText.innerHTML = text;
@@ -260,16 +246,14 @@
       function resetModelToCube() {
         if (currentMesh !== cube) {
           rootGroup.remove(currentMesh);
+          currentMesh = cube;
         }
-
-        currentMesh = cube;
-        currentModel = cube;
-        currentSource = 'default cube';
 
         cube.visible = true;
         cube.rotation.set(0.6, 0.8, 0);
         rootGroup.position.set(0, 0, 0);
         rootGroup.rotation.set(0, 0, 0);
+        defaultCubeVisible = true;
 
         setStatus('Source: <strong>Default cube</strong>');
       }
@@ -301,10 +285,9 @@
 
           rootGroup.add(mesh);
           currentMesh = mesh;
-          currentModel = mesh;
-          currentSource = name;
-
           cube.visible = false;
+          defaultCubeVisible = false;
+
           setStatus('Source: <strong>' + name + '</strong>');
         } catch (err) {
           console.error('STL parsing failed:', err);
@@ -328,18 +311,13 @@
         resetModelToCube();
       });
 
-      function setGyroTargetFromOrientation(beta, gamma, alpha = 0) {
+      function setGyroAnglesFromOrientation(beta, gamma, alpha = 0) {
         if (beta === null || gamma === null) return;
 
-        const rollRad = THREE.MathUtils.degToRad(beta * 0.9);
-        const pitchRad = THREE.MathUtils.degToRad(gamma * 0.9);
-        const yawRad = THREE.MathUtils.degToRad(alpha * 0.35);
-
-        gyroState.roll = rollRad;
-        gyroState.pitch = pitchRad;
-        gyroState.yaw = yawRad;
+        gyroState.roll = THREE.MathUtils.degToRad(beta * 0.9);
+        gyroState.pitch = THREE.MathUtils.degToRad(gamma * 0.9);
+        gyroState.yaw = THREE.MathUtils.degToRad(alpha * 0.35);
         gyroState.active = true;
-        gyroState.source = 'device orientation';
       }
 
       function enableDeviceGyro() {
@@ -350,12 +328,12 @@
 
         const requestPermission = DeviceOrientationEvent.requestPermission;
 
-        const doEnable = () => {
+        const enable = () => {
           window.addEventListener('deviceorientation', (event) => {
             const beta = event.beta ?? 0;
             const gamma = event.gamma ?? 0;
             const alpha = event.alpha ?? 0;
-            setGyroTargetFromOrientation(beta, gamma, alpha);
+            setGyroAnglesFromOrientation(beta, gamma, alpha);
             setStatus('Source: <strong>Device gyroscope</strong>');
           }, true);
 
@@ -365,79 +343,106 @@
         if (typeof requestPermission === 'function') {
           requestPermission()
             .then((response) => {
-              if (response === 'granted') doEnable();
+              if (response === 'granted') enable();
               else setStatus('Source: <strong>Gyroscope permission denied</strong>');
             })
             .catch(() => setStatus('Source: <strong>Gyroscope permission denied</strong>'));
         } else {
-          doEnable();
+          enable();
         }
       }
 
       gyroDeviceButton.addEventListener('click', enableDeviceGyro);
 
-      function connectESP32WebSocket() {
-        const url = wsInput.value.trim();
-        if (!url) {
-          setStatus('Source: <strong>Enter a WebSocket URL first</strong>');
+      async function connectUSB() {
+        if (!('serial' in navigator)) {
+          setStatus('Source: <strong>Web Serial unsupported in this browser</strong>');
           return;
         }
 
         try {
-          if (websocket) {
-            websocket.close();
-          }
+          usbPort = await navigator.serial.requestPort();
+          await usbPort.open({ baudRate: 115200 });
 
-          websocket = new WebSocket(url);
+          usbReader = usbPort.readable.getReader();
 
-          websocket.onopen = () => {
-            socketConnected = true;
-            setStatus('Source: <strong>ESP32 WebSocket connected</strong>');
-          };
+          const decoder = new TextDecoder();
 
-          websocket.onclose = () => {
-            socketConnected = false;
-            setStatus('Source: <strong>ESP32 WebSocket disconnected</strong>');
-          };
+          while (usbPort && usbPort.readable) {
+            const { value, done } = await usbReader.read();
+            if (done) break;
 
-          websocket.onerror = () => {
-            socketConnected = false;
-            setStatus('Source: <strong>ESP32 WebSocket error</strong>');
-          };
+            usbBuffer += decoder.decode(value, { stream: true });
+            const lines = usbBuffer.split(/\r?\n/);
+            usbBuffer = lines.pop() || '';
 
-          websocket.onmessage = (event) => {
-            try {
-              const parsed = JSON.parse(event.data);
-              const roll = Number(parsed.roll ?? parsed.x ?? 0);
-              const pitch = Number(parsed.pitch ?? parsed.y ?? 0);
-              const yaw = Number(parsed.yaw ?? parsed.z ?? 0);
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
 
-              gyroState.roll = THREE.MathUtils.degToRad(roll);
-              gyroState.pitch = THREE.MathUtils.degToRad(pitch);
-              gyroState.yaw = THREE.MathUtils.degToRad(yaw);
-              gyroState.active = true;
-              gyroState.source = 'ESP32 gyroscope';
-              setStatus('Source: <strong>ESP32 gyroscope</strong>');
-            } catch (err) {
-              console.warn('Invalid WebSocket payload:', event.data);
+              try {
+                const obj = JSON.parse(trimmed);
+                const roll = Number(obj.roll ?? obj.x ?? 0);
+                const pitch = Number(obj.pitch ?? obj.y ?? 0);
+                const yaw = Number(obj.yaw ?? obj.z ?? 0);
+
+                gyroState.roll = THREE.MathUtils.degToRad(roll);
+                gyroState.pitch = THREE.MathUtils.degToRad(pitch);
+                gyroState.yaw = THREE.MathUtils.degToRad(yaw);
+                gyroState.active = true;
+                setStatus('Source: <strong>ESP32 USB</strong>');
+              } catch {
+                const parts = trimmed.split(',');
+                if (parts.length >= 3) {
+                  const roll = Number(parts[0]);
+                  const pitch = Number(parts[1]);
+                  const yaw = Number(parts[2]);
+
+                  gyroState.roll = THREE.MathUtils.degToRad(roll);
+                  gyroState.pitch = THREE.MathUtils.degToRad(pitch);
+                  gyroState.yaw = THREE.MathUtils.degToRad(yaw);
+                  gyroState.active = true;
+                  setStatus('Source: <strong>ESP32 USB</strong>');
+                }
+              }
             }
-          };
+          }
         } catch (err) {
-          console.error('WebSocket connection failed:', err);
-          setStatus('Source: <strong>WebSocket connection failed</strong>');
+          console.error('USB connection failed:', err);
+          setStatus('Source: <strong>USB connection failed</strong>');
         }
       }
 
-      connectWebSocketButton.addEventListener('click', connectESP32WebSocket);
+      async function disconnectUSB() {
+        if (usbReader) {
+          usbReader.cancel();
+          usbReader = null;
+        }
+
+        if (usbPort) {
+          try {
+            await usbPort.close();
+          } catch (err) {
+            console.warn('USB close warning:', err);
+          }
+          usbPort = null;
+        }
+
+        usbBuffer = '';
+        setStatus('Source: <strong>USB disconnected</strong>');
+      }
+
+      usbConnectButton.addEventListener('click', connectUSB);
+      usbDisconnectButton.addEventListener('click', disconnectUSB);
 
       function animate() {
         requestAnimationFrame(animate);
 
         if (gyroState.active) {
-          const drag = 0.08;
-          rootGroup.rotation.x += (gyroState.roll - rootGroup.rotation.x) * drag;
-          rootGroup.rotation.y += (gyroState.pitch - rootGroup.rotation.y) * drag;
-          rootGroup.rotation.z += (gyroState.yaw - rootGroup.rotation.z) * drag;
+          const smoothing = 0.08;
+          rootGroup.rotation.x += (gyroState.roll - rootGroup.rotation.x) * smoothing;
+          rootGroup.rotation.y += (gyroState.pitch - rootGroup.rotation.y) * smoothing;
+          rootGroup.rotation.z += (gyroState.yaw - rootGroup.rotation.z) * smoothing;
         } else {
           rootGroup.rotation.x += 0.005;
           rootGroup.rotation.y += 0.01;

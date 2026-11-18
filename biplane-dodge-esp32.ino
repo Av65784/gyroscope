@@ -1,36 +1,37 @@
 /*
- ESP32 DevKit + MPU6050 USB serial adapter
- Upload this with Arduino IDE.
- Required libraries: Adafruit_MPU6050, Adafruit_Sensor, ArduinoJson optional.
+ Arduino Uno + MPU6050 USB serial adapter
+ Upload this sketch to an Arduino Uno using the Arduino IDE.
+ Required libraries: Adafruit_MPU6050 and Adafruit_Sensor.
 
- Wiring:
-   MPU6050 SCL -> ESP32 GPIO 22
-   MPU6050 SDA -> ESP32 GPIO 21
-   MPU6050 GND -> ESP32 GND
-   MPU6050 VCC -> 3V3 (use module-specific voltage guidance)
+ Wiring (Arduino Uno):
+   MPU6050 SDA -> A4 (SDA)
+   MPU6050 SCL -> A5 (SCL)
+   MPU6050 GND -> GND
+   MPU6050 VCC -> 3.3V, or 5V only if your breakout board explicitly supports it
 
- Output formats accepted by the web game:
-   roll,pitch,yaw
-   {"roll":R,"pitch":P,"yaw":Y}
+ Important: The Uno uses 5 V logic. Use a bidirectional I2C level shifter
+ unless your MPU6050 breakout explicitly includes 5 V-safe I2C level shifting.
+
+ USB serial output at 115200 baud: roll,pitch,yaw
+ The browser game accepts this CSV format.
 */
 
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
-
-constexpr int I2C_SDA_PIN = 21;
-constexpr int I2C_SCL_PIN = 22;
+#include <math.h>
 
 Adafruit_MPU6050 mpu;
 
 void setup() {
   Serial.begin(115200);
-  delay(700);
+  Wire.begin();  // Uno hardware I2C pins: SDA=A4, SCL=A5
 
-  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   if (!mpu.begin()) {
     Serial.println("ERROR:MPU6050_NOT_FOUND");
-    while (true) delay(1000);
+    while (true) {
+      delay(1000);
+    }
   }
 
   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
@@ -42,16 +43,24 @@ void loop() {
   sensors_event_t accel, gyro, temperature;
   mpu.getEvent(&accel, &gyro, &temperature);
 
-  // The atan2-based values provide roll/pitch-like orientation without a quaternion library.
-  float roll = atan2(accel.acceleration.y, accel.acceleration.z) * 57.2957795f;
-  float pitch = atan2(-accel.acceleration.x,
-                       sqrt(accel.acceleration.y * accel.acceleration.y +
-                            accel.acceleration.z * accel.acceleration.z)) * 57.2957795f;
+  const float radiansToDegrees = 57.2957795f;
+  const float roll = atan2(accel.acceleration.y, accel.acceleration.z) * radiansToDegrees;
+  const float pitch = atan2(-accel.acceleration.x,
+                            sqrt(accel.acceleration.y * accel.acceleration.y +
+                                 accel.acceleration.z * accel.acceleration.z)) * radiansToDegrees;
 
+  // Integrate Z gyro rate with measured elapsed time. Yaw will drift over time
+  // because this simple setup has no magnetometer correction; the game mainly
+  // uses roll and pitch for movement.
   static float yawPosition = 0.0f;
-  yawPosition += gyro.gyro.z * 0.02f * 57.2957795f;
+  static unsigned long previousMicros = 0;
+  const unsigned long nowMicros = micros();
+  if (previousMicros != 0) {
+    const float elapsedSeconds = (nowMicros - previousMicros) / 1000000.0f;
+    yawPosition += gyro.gyro.z * elapsedSeconds * radiansToDegrees;
+  }
+  previousMicros = nowMicros;
 
-  // CSV is compact and directly accepted by the web game.
   Serial.print(roll, 1);
   Serial.print(',');
   Serial.print(pitch, 1);

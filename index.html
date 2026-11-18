@@ -40,11 +40,11 @@
     <div id="menu">
       <div class="card">
         <h1>Biplane Dodge</h1>
-        <p class="subtitle">Tilt the MPU6050 / ESP32 to move the plane. Dodge incoming fire for as long as possible.</p>
+        <p class="subtitle">Tilt the MPU6050 / Arduino Uno to move the plane. Dodge incoming fire for as long as possible.</p>
         <div class="controls">
           <button id="startButton">Start Game</button>
           <button id="deviceGyroButton" class="secondary">Use Phone Gyro</button>
-          <button id="usbButton" class="secondary">Connect ESP32 USB</button>
+          <button id="usbButton" class="secondary">Connect Arduino USB</button>
           <button id="keyboardButton" class="secondary">Use Keyboard</button>
         </div>
       </div>
@@ -219,7 +219,7 @@
       try{
         usbPort=await navigator.serial.requestPort(); await usbPort.open({baudRate:115200}); usbReader=usbPort.readable.getReader();
         const decoder=new TextDecoder();
-        setStatus('Source: <strong>ESP32 USB connecting</strong>');
+        setStatus('Source: <strong>Arduino USB connecting</strong>');
         while(usbPort&&usbPort.readable){
           const {value,done}=await usbReader.read(); if(done)break;
           serialText+=decoder.decode(value,{stream:true});
@@ -235,7 +235,7 @@
               control.roll=THREE.MathUtils.degToRad(roll);
               control.pitch=THREE.MathUtils.degToRad(pitch);
               control.active=true;
-              setStatus('Source: <strong>ESP32 MPU6050 USB</strong>');
+              setStatus('Source: <strong>Arduino Uno MPU6050 USB</strong>');
             }
           }
         }

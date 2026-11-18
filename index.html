@@ -1,24 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gyro Biplane Dodge</title>
   <style>
-    :root { --cyan:#67d7ff; --red:#ff5d6c; --panel:rgba(6,15,32,.88); }
+    :root { --cyan:#67d7ff; --panel:rgba(6,15,32,.92); }
     * { box-sizing:border-box; }
-    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#07101f; color:#eef7ff; font-family:Inter,Arial,sans-serif; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#07101f; color:#eef7ff; font-family:Arial,sans-serif; }
     #app { position:relative; width:100%; height:100%; }
     canvas { display:block; width:100%; height:100%; }
-    #hud { position:absolute; top:18px; left:18px; right:18px; display:flex; justify-content:space-between; pointer-events:none; z-index:10; }
-    .hud-box { min-width:150px; padding:10px 14px; border:1px solid rgba(103,215,255,.28); border-radius:12px; background:var(--panel); box-shadow:0 10px 30px rgba(0,0,0,.22); }
+    #hud { position:absolute; z-index:10; top:18px; left:18px; right:18px; display:flex; justify-content:space-between; pointer-events:none; }
+    .hud-box { min-width:145px; padding:10px 14px; border:1px solid rgba(103,215,255,.35); border-radius:12px; background:var(--panel); }
     .label { color:#90a8c1; font-size:11px; letter-spacing:.15em; text-transform:uppercase; }
-    #score { color:white; font-size:28px; font-weight:800; }
-    #status { position:absolute; left:18px; bottom:18px; z-index:10; max-width:min(430px,calc(100vw - 36px)); padding:10px 12px; border-radius:10px; background:var(--panel); color:#a8bdd3; font-size:12px; }
+    #score, #dodged { font-size:28px; font-weight:800; }
+    #status { position:absolute; z-index:10; left:18px; bottom:18px; max-width:calc(100vw - 36px); padding:10px 12px; border-radius:10px; background:var(--panel); color:#a8bdd3; font-size:12px; }
     #status strong { color:var(--cyan); }
-    #menu, #gameOver { position:absolute; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:linear-gradient(rgba(3,9,20,.15),rgba(3,9,20,.72)); }
+    #menu, #gameOver { position:absolute; z-index:20; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(rgba(3,9,20,.15),rgba(3,9,20,.72)); }
     #gameOver { display:none; }
-    .card { width:min(460px,calc(100vw - 32px)); padding:24px; text-align:center; border:1px solid rgba(103,215,255,.28); border-radius:18px; background:rgba(5,13,28,.94); box-shadow:0 24px 80px rgba(0,0,0,.55); }
+    .card { width:min(460px,calc(100vw - 32px)); padding:24px; text-align:center; border:1px solid rgba(103,215,255,.35); border-radius:18px; background:rgba(5,13,28,.96); box-shadow:0 24px 80px rgba(0,0,0,.55); }
     h1 { margin:0 0 8px; font-size:32px; }
     .subtitle { margin:0 0 18px; color:#9eb2c8; line-height:1.45; }
     .controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -26,21 +26,21 @@
     button.secondary { background:rgba(12,26,48,.95); color:#ddecf8; }
     #gameOver h1 { color:#ff6d7a; }
     #finalScore { font-size:48px; font-weight:900; }
-    @media (max-width:640px) { .controls{grid-template-columns:1fr}.hud-box{min-width:120px}.label{font-size:9px} }
+    @media (max-width:640px) { .controls { grid-template-columns:1fr; } .hud-box { min-width:120px; } }
   </style>
 </head>
 <body>
   <div id="app">
     <div id="hud">
       <div class="hud-box"><div class="label">Score</div><div id="score">0000</div></div>
-      <div class="hud-box" style="text-align:right"><div class="label">Dodged</div><div id="dodged" style="font-size:28px;font-weight:800">0</div></div>
+      <div class="hud-box" style="text-align:right"><div class="label">Dodged</div><div id="dodged">0</div></div>
     </div>
-    <div id="status">Source: <strong>Waiting to start</strong></div>
+    <div id="status">Source: <strong>Loading game</strong></div>
 
     <div id="menu">
       <div class="card">
         <h1>Biplane Dodge</h1>
-        <p class="subtitle">Tilt the MPU6050 / Arduino Uno to move the plane. Dodge incoming fire for as long as possible.</p>
+        <p class="subtitle">Tilt an MPU6050 connected to an Arduino Uno, use phone orientation, or use the keyboard.</p>
         <div class="controls">
           <button id="startButton">Start Game</button>
           <button id="deviceGyroButton" class="secondary">Use Phone Gyro</button>
@@ -84,21 +84,22 @@
     app.appendChild(renderer.domElement);
 
     scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x18243a, 2.2));
-    const key = new THREE.DirectionalLight(0xffffff, 2.4);
-    key.position.set(40,70,100);
-    scene.add(key);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    keyLight.position.set(40, 70, 100);
+    scene.add(keyLight);
 
     const starGeometry = new THREE.BufferGeometry();
     const starPositions = [];
-    for (let i=0;i<450;i++) starPositions.push((Math.random()-0.5)*260,(Math.random()-0.5)*170,-20-Math.random()*250);
-    starGeometry.setAttribute('position',new THREE.Float32BufferAttribute(starPositions,3));
-    scene.add(new THREE.Points(starGeometry,new THREE.PointsMaterial({color:0xaedcff,size:0.55})));
+    for (let i = 0; i < 450; i++) {
+      starPositions.push((Math.random() - 0.5) * 260, (Math.random() - 0.5) * 170, -20 - Math.random() * 250);
+    }
+    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+    scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({ color:0xaedcff, size:0.55 })));
 
     const planeRoot = new THREE.Group();
+    planeRoot.position.set(0, 0, -18);
     scene.add(planeRoot);
-    planeRoot.position.set(0,0,-18);
 
-    let biplane = null;
     let gameActive = false;
     let score = 0;
     let dodged = 0;
@@ -112,204 +113,271 @@
     const bullets = [];
 
     const control = { x:0, y:0, roll:0, pitch:0, active:false };
-    const keys = { ArrowLeft:false, ArrowRight:false, ArrowUp:false, ArrowDown:false, a:false,d:false,w:false,s:false };
+    const keys = { ArrowLeft:false, ArrowRight:false, ArrowUp:false, ArrowDown:false, a:false, d:false, w:false, s:false };
 
-    function setStatus(text){ statusElement.innerHTML=text; }
+    function setStatus(text) { statusElement.innerHTML = text; }
 
-    function loadBiplane(){
-      const urls = [
-        './Glorious%20Borwo-Bombul.stl',
-        'https://raw.githubusercontent.com/Av65784/gyroscope/main/Glorious%20Borwo-Bombul.stl'
-      ];
-      const tryLoad = (index) => {
-        if(index>=urls.length){ setStatus('Source: <strong>STL unavailable - using fallback plane</strong>'); createFallbackPlane(); return; }
-        new STLLoader().load(urls[index], geometry => {
-          geometry.computeVertexNormals();
-          geometry.computeBoundingBox();
-          const box = geometry.boundingBox;
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          const maxSize = Math.max(size.x,size.y,size.z)||1;
-          const material = new THREE.MeshPhongMaterial({color:0x66cfff,emissive:0x071a29,shininess:80,side:THREE.DoubleSide});
-          biplane = new THREE.Mesh(geometry,material);
-          biplane.position.sub(center);
-          biplane.scale.setScalar(62/maxSize);
-          biplane.rotation.x = -Math.PI/2;
-          planeRoot.add(biplane);
-          setStatus('Source: <strong>Biplane STL loaded</strong>');
-        }, undefined, () => tryLoad(index+1));
-      };
-      tryLoad(0);
-    }
-
-    function createFallbackPlane(){
+    function createFallbackPlane() {
       const group = new THREE.Group();
-      const material = new THREE.MeshPhongMaterial({color:0x66cfff,emissive:0x071a29,shininess:80});
-      const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(3,14,5,10),material); fuselage.rotation.x=Math.PI/2;
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(32,1.2,7),material); wing.position.z=2;
-      const lowerWing = wing.clone(); lowerWing.position.z=-6;
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(9,1,4),material); tail.position.z=-10;
-      group.add(fuselage,wing,lowerWing,tail);
-      biplane=group;
+      const material = new THREE.MeshPhongMaterial({ color:0x66cfff, emissive:0x071a29, shininess:80 });
+      const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(3,14,5,10), material);
+      fuselage.rotation.x = Math.PI / 2;
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(32,1.2,7), material);
+      wing.position.z = 2;
+      const lowerWing = wing.clone(); lowerWing.position.z = -6;
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(9,1,4), material);
+      tail.position.z = -10;
+      group.add(fuselage, wing, lowerWing, tail);
       planeRoot.add(group);
     }
 
-    // Ellipsoid hitbox remains conservative in world space.
-    const hitboxSize = new THREE.Vector3(24,10,16);
+    function loadBiplane() {
+      const loader = new STLLoader();
+      const modelUrl = './Glorious%20Borwo-Bombul.stl';
+      loader.load(modelUrl, geometry => {
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxSize = Math.max(size.x, size.y, size.z) || 1;
+        const material = new THREE.MeshPhongMaterial({ color:0x66cfff, emissive:0x071a29, shininess:80, side:THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.sub(center);
+        mesh.scale.setScalar(62 / maxSize);
+        mesh.rotation.x = -Math.PI / 2;
+        planeRoot.add(mesh);
+        setStatus('Source: <strong>Biplane STL loaded</strong>');
+      }, undefined, () => {
+        console.warn('Biplane STL could not be loaded; using fallback plane');
+        createFallbackPlane();
+        setStatus('Source: <strong>Fallback plane</strong>');
+      });
+    }
 
-    function spawnBullet(){
-      const geometry = new THREE.SphereGeometry(2.2,10,8);
-      const material = new THREE.MeshStandardMaterial({color:0xff5364,emissive:0xff1836,emissiveIntensity:2,roughness:.25});
-      const bullet = new THREE.Mesh(geometry,material);
-      bullet.position.set((Math.random()-0.5)*82,(Math.random()-0.5)*48,-210);
+    const hitboxSize = new THREE.Vector3(24, 10, 16);
+
+    function spawnBullet() {
+      const geometry = new THREE.SphereGeometry(2.2, 10, 8);
+      const material = new THREE.MeshStandardMaterial({ color:0xff5364, emissive:0xff1836, emissiveIntensity:2 });
+      const bullet = new THREE.Mesh(geometry, material);
+      bullet.position.set((Math.random() - 0.5) * 82, (Math.random() - 0.5) * 48, -210);
       scene.add(bullet);
       bullets.push(bullet);
     }
 
-    function clearBullets(){
-      for(const bullet of bullets){ scene.remove(bullet); bullet.geometry.dispose(); bullet.material.dispose(); }
-      bullets.length=0;
+    function clearBullets() {
+      for (const bullet of bullets) {
+        scene.remove(bullet);
+        bullet.geometry.dispose();
+        bullet.material.dispose();
+      }
+      bullets.length = 0;
     }
 
-    function startGame(){
+    function startGame() {
       clearBullets();
-      score=0; dodged=0; spawnInterval=1050; bulletSpeed=48;
-      startTime=performance.now(); lastSpawn=startTime;
-      planeRoot.position.set(0,0,-18);
-      control.x=0; control.y=0;
-      menu.style.display='none'; gameOverScreen.style.display='none';
-      gameActive=true;
+      score = 0;
+      dodged = 0;
+      spawnInterval = 1050;
+      bulletSpeed = 48;
+      startTime = performance.now();
+      lastSpawn = startTime;
+      planeRoot.position.set(0, 0, -18);
+      dodgedElement.textContent = '0';
+      menu.style.display = 'none';
+      gameOverScreen.style.display = 'none';
+      gameActive = true;
       setStatus('Source: <strong>Game active</strong>');
     }
 
-    function endGame(){
-      if(!gameActive)return;
-      gameActive=false;
-      document.getElementById('finalScore').textContent=String(Math.floor(score));
-      document.getElementById('finalDodged').textContent=String(dodged);
-      gameOverScreen.style.display='flex';
+    function endGame() {
+      if (!gameActive) return;
+      gameActive = false;
+      document.getElementById('finalScore').textContent = String(Math.floor(score));
+      document.getElementById('finalDodged').textContent = String(dodged);
+      gameOverScreen.style.display = 'flex';
       setStatus('Source: <strong>Game over</strong>');
     }
 
-    function setGyroAngles(beta,gamma,alpha=0){
-      if(beta===null||gamma===null)return;
-      control.x=THREE.MathUtils.clamp(gamma/35,-1,1);
-      control.y=THREE.MathUtils.clamp(beta/35,-1,1);
-      control.roll=THREE.MathUtils.degToRad(gamma*.9);
-      control.pitch=THREE.MathUtils.degToRad(beta*.9);
-      control.active=true;
+    function setGyroAngles(beta, gamma) {
+      if (beta === null || gamma === null) return;
+      control.x = THREE.MathUtils.clamp(gamma / 35, -1, 1);
+      control.y = THREE.MathUtils.clamp(beta / 35, -1, 1);
+      control.roll = THREE.MathUtils.degToRad(gamma * 0.9);
+      control.pitch = THREE.MathUtils.degToRad(beta * 0.9);
+      control.active = true;
     }
 
-    async function enableDeviceGyro(){
-      if(typeof DeviceOrientationEvent==='undefined'){setStatus('Source: <strong>Device gyro unsupported</strong>');return;}
-      const enable=()=>{
-        window.addEventListener('deviceorientation',event=>{
-          setGyroAngles(event.beta??0,event.gamma??0,event.alpha??0);
+    async function enableDeviceGyro() {
+      if (typeof DeviceOrientationEvent === 'undefined') {
+        setStatus('Source: <strong>Device gyro unsupported</strong>');
+        return;
+      }
+      const enable = () => {
+        window.addEventListener('deviceorientation', event => {
+          setGyroAngles(event.beta ?? 0, event.gamma ?? 0);
           setStatus('Source: <strong>Phone gyroscope</strong>');
-        },true);
+        }, true);
       };
-      if(typeof DeviceOrientationEvent.requestPermission==='function'){
-        try{const result=await DeviceOrientationEvent.requestPermission(); if(result==='granted')enable(); else setStatus('Source: <strong>Gyro permission denied</strong>');}
-        catch{setStatus('Source: <strong>Gyro permission denied</strong>');}
-      }else enable();
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const result = await DeviceOrientationEvent.requestPermission();
+          result === 'granted' ? enable() : setStatus('Source: <strong>Gyro permission denied</strong>');
+        } catch { setStatus('Source: <strong>Gyro permission denied</strong>'); }
+      } else enable();
     }
 
-    async function connectUSB(){
-      if(!('serial' in navigator)){setStatus('Source: <strong>Web Serial unsupported</strong>');return;}
-      try{
-        usbPort=await navigator.serial.requestPort(); await usbPort.open({baudRate:115200}); usbReader=usbPort.readable.getReader();
-        const decoder=new TextDecoder();
+    async function connectUSB() {
+      if (!('serial' in navigator)) {
+        setStatus('Source: <strong>Web Serial unsupported - use Chrome or Edge</strong>');
+        return;
+      }
+      try {
+        usbPort = await navigator.serial.requestPort();
+        await usbPort.open({ baudRate:115200 });
+        usbReader = usbPort.readable.getReader();
+        const decoder = new TextDecoder();
         setStatus('Source: <strong>Arduino USB connecting</strong>');
-        while(usbPort&&usbPort.readable){
-          const {value,done}=await usbReader.read(); if(done)break;
-          serialText+=decoder.decode(value,{stream:true});
-          const lines=serialText.split(/\r?\n/); serialText=lines.pop()||'';
-          for(const line of lines){
-            const trimmed=line.trim(); if(!trimmed)continue;
-            let roll,pitch,yaw;
-            try{const obj=JSON.parse(trimmed); roll=Number(obj.roll??obj.x??0); pitch=Number(obj.pitch??obj.y??0); yaw=Number(obj.yaw??obj.z??0);}
-            catch{const parts=trimmed.split(','); if(parts.length<3)continue; [roll,pitch,yaw]=parts.map(Number);}
-            if([roll,pitch,yaw].every(Number.isFinite)){
-              control.x=THREE.MathUtils.clamp(pitch/35,-1,1);
-              control.y=THREE.MathUtils.clamp(roll/35,-1,1);
-              control.roll=THREE.MathUtils.degToRad(roll);
-              control.pitch=THREE.MathUtils.degToRad(pitch);
-              control.active=true;
+
+        while (usbPort && usbPort.readable) {
+          const { value, done } = await usbReader.read();
+          if (done) break;
+          serialText += decoder.decode(value, { stream:true });
+          const lines = serialText.split(/\r?\n/);
+          serialText = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            let roll, pitch;
+            try {
+              const obj = JSON.parse(trimmed);
+              roll = Number(obj.roll ?? obj.x ?? 0);
+              pitch = Number(obj.pitch ?? obj.y ?? 0);
+            } catch {
+              const parts = trimmed.split(',');
+              if (parts.length < 2) continue;
+              roll = Number(parts[0]);
+              pitch = Number(parts[1]);
+            }
+
+            if (Number.isFinite(roll) && Number.isFinite(pitch)) {
+              control.x = THREE.MathUtils.clamp(pitch / 35, -1, 1);
+              control.y = THREE.MathUtils.clamp(roll / 35, -1, 1);
+              control.roll = THREE.MathUtils.degToRad(roll);
+              control.pitch = THREE.MathUtils.degToRad(pitch);
+              control.active = true;
               setStatus('Source: <strong>Arduino Uno MPU6050 USB</strong>');
             }
           }
         }
-      }catch(error){console.error(error);setStatus('Source: <strong>USB connection failed</strong>');}
+      } catch (error) {
+        console.error(error);
+        setStatus('Source: <strong>USB connection failed</strong>');
+      }
     }
 
-    async function disconnectUSB(){
-      if(usbReader){try{await usbReader.cancel();}catch{}usbReader=null;}
-      if(usbPort){try{await usbPort.close();}catch{}usbPort=null;}
+    async function disconnectUSB() {
+      if (usbReader) { try { await usbReader.cancel(); } catch {} usbReader = null; }
+      if (usbPort) { try { await usbPort.close(); } catch {} usbPort = null; }
+      serialText = '';
       setStatus('Source: <strong>USB disconnected</strong>');
     }
 
-    function enableKeyboard(){
-      control.active=false;
+    function enableKeyboard() {
+      control.active = false;
       setStatus('Source: <strong>Keyboard arrows / WASD</strong>');
     }
 
-    document.getElementById('startButton').addEventListener('click',startGame);
-    document.getElementById('restartButton').addEventListener('click',startGame);
-    document.getElementById('deviceGyroButton').addEventListener('click',enableDeviceGyro);
-    document.getElementById('usbButton').addEventListener('click',connectUSB);
-    document.getElementById('keyboardButton').addEventListener('click',enableKeyboard);
+    document.getElementById('startButton').addEventListener('click', startGame);
+    document.getElementById('restartButton').addEventListener('click', startGame);
+    document.getElementById('deviceGyroButton').addEventListener('click', enableDeviceGyro);
+    document.getElementById('usbButton').addEventListener('click', connectUSB);
+    document.getElementById('keyboardButton').addEventListener('click', enableKeyboard);
 
-    window.addEventListener('keydown',event=>{
-      if(event.key in keys)keys[event.key]=true;
-    });
-    window.addEventListener('keyup',event=>{
-      if(event.key in keys)keys[event.key]=false;
-    });
+    window.addEventListener('keydown', event => { if (event.key in keys) keys[event.key] = true; });
+    window.addEventListener('keyup', event => { if (event.key in keys) keys[event.key] = false; });
 
-    function updateControls(){
-      if(!control.active){
-        control.x=0; control.y=0;
-        if(keys.ArrowLeft||keys.a)control.x=-1;
-        if(keys.ArrowRight||keys.d)control.x=1;
-        if(keys.ArrowUp||keys.w)control.y=1;
-        if(keys.ArrowDown||keys.s)control.y=-1;
+    function updateControls() {
+      if (!control.active) {
+        control.x = 0; control.y = 0;
+        if (keys.ArrowLeft || keys.a) control.x = -1;
+        if (keys.ArrowRight || keys.d) control.x = 1;
+        if (keys.ArrowUp || keys.w) control.y = 1;
+        if (keys.ArrowDown || keys.s) control.y = -1;
       }
-      planeRoot.position.x+=(control.x*72-planeRoot.position.x)*.12;
-      planeRoot.position.y+=(control.y*-38-planeRoot.position.y)*.12;
-      planeRoot.position.x=THREE.MathUtils.clamp(planeRoot.position.x,-74,74);
-      planeRoot.position.y=THREE.MathUtils.clamp(planeRoot.position.y,-43,43);
-      planeRoot.rotation.z+=((-control.x*.32-planeRoot.rotation.z)*.12);
-      planeRoot.rotation.x+=(control.pitch*.45-planeRoot.rotation.x)*.08;
-      planeRoot.rotation.y+=(control.roll*.45-planeRoot.rotation.y)*.08;
+
+      planeRoot.position.x += (control.x * 72 - planeRoot.position.x) * 0.12;
+      planeRoot.position.y += (control.y * -38 - planeRoot.position.y) * 0.12;
+      planeRoot.position.x = THREE.MathUtils.clamp(planeRoot.position.x, -74, 74);
+      planeRoot.position.y = THREE.MathUtils.clamp(planeRoot.position.y, -43, 43);
+      planeRoot.rotation.z += (-control.x * 0.32 - planeRoot.rotation.z) * 0.12;
+      planeRoot.rotation.x += (control.pitch * 0.45 - planeRoot.rotation.x) * 0.08;
+      planeRoot.rotation.y += (control.roll * 0.45 - planeRoot.rotation.y) * 0.08;
     }
 
-    function updateBullets(delta,now){
-      if(gameActive&&now-lastSpawn>spawnInterval){spawnBullet();lastSpawn=now;spawnInterval=Math.max(300,spawnInterval*.985);bulletSpeed=Math.min(140,bulletSpeed+1.1);}
-      for(let i=bullets.length-1;i>=0;i--){
-        const bullet=bullets[i]; bullet.position.z+=bulletSpeed*delta; bullet.rotation.x+=delta*3; bullet.rotation.y+=delta*4;
-        const dx=bullet.position.x-planeRoot.position.x;
-        const dy=bullet.position.y-planeRoot.position.y;
-        const dz=bullet.position.z-planeRoot.position.z;
-        if(Math.abs(dx)<hitboxSize.x*.55&&Math.abs(dy)<hitboxSize.y*.9&&Math.abs(dz)<hitboxSize.z*.7){ endGame(); }
-        if(bullet.position.z>155){scene.remove(bullet);bullet.geometry.dispose();bullet.material.dispose();bullets.splice(i,1);dodged++;dodgedElement.textContent=String(dodged);}
+    function updateBullets(delta, now) {
+      if (gameActive && now - lastSpawn > spawnInterval) {
+        spawnBullet();
+        lastSpawn = now;
+        spawnInterval = Math.max(300, spawnInterval * 0.985);
+        bulletSpeed = Math.min(140, bulletSpeed + 1.1);
+      }
+
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        bullet.position.z += bulletSpeed * delta;
+        bullet.rotation.x += delta * 3;
+        bullet.rotation.y += delta * 4;
+
+        const dx = bullet.position.x - planeRoot.position.x;
+        const dy = bullet.position.y - planeRoot.position.y;
+        const dz = bullet.position.z - planeRoot.position.z;
+
+        if (Math.abs(dx) < hitboxSize.x * 0.55 &&
+            Math.abs(dy) < hitboxSize.y * 0.9 &&
+            Math.abs(dz) < hitboxSize.z * 0.7) {
+          endGame();
+        }
+
+        if (bullet.position.z > 155) {
+          scene.remove(bullet);
+          bullet.geometry.dispose();
+          bullet.material.dispose();
+          bullets.splice(i, 1);
+          dodged++;
+          dodgedElement.textContent = String(dodged);
+        }
       }
     }
 
-    function animate(now){
+    let previousTime = performance.now();
+    function animate(now) {
       requestAnimationFrame(animate);
-      const delta=Math.min((animate.lastNow?now-animate.lastNow:16)/1000,.05); animate.lastNow=now;
+      const delta = Math.min((now - previousTime) / 1000, 0.05);
+      previousTime = now;
       updateControls();
-      if(gameActive){
-        score=((now-startTime)/100)/10+dodged*25;
-        scoreElement.textContent=String(Math.floor(score)).padStart(4,'0');
+
+      if (gameActive) {
+        score = ((now - startTime) / 100) / 10 + dodged * 25;
+        scoreElement.textContent = String(Math.floor(score)).padStart(4, '0');
       }
-      updateBullets(delta,now);
-      renderer.render(scene,camera);
+
+      updateBullets(delta, now);
+      renderer.render(scene, camera);
     }
 
-    function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
-    window.addEventListener('resize',onResize);
+    function onResize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    }
+
+    window.addEventListener('resize', onResize);
     loadBiplane();
+    setStatus('Source: <strong>Ready - press Start Game</strong>');
     requestAnimationFrame(animate);
   </script>
 </body>

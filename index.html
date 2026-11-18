@@ -1,465 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>STL Gyroscope Viewer</title>
-    <style>
-      :root {
-        --bg: #0b1020;
-        --panel: rgba(15, 23, 42, 0.85);
-        --panel-border: rgba(148, 163, 184, 0.2);
-        --text: #e2e8f0;
-        --muted: #94a3b8;
-        --accent: #7dd3fc;
-        --accent-2: #a78bfa;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gyro Biplane Dodge</title>
+  <style>
+    :root { --cyan:#67d7ff; --red:#ff5d6c; --panel:rgba(6,15,32,.88); }
+    * { box-sizing:border-box; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#07101f; color:#eef7ff; font-family:Inter,Arial,sans-serif; }
+    #app { position:relative; width:100%; height:100%; }
+    canvas { display:block; width:100%; height:100%; }
+    #hud { position:absolute; top:18px; left:18px; right:18px; display:flex; justify-content:space-between; pointer-events:none; z-index:10; }
+    .hud-box { min-width:150px; padding:10px 14px; border:1px solid rgba(103,215,255,.28); border-radius:12px; background:var(--panel); box-shadow:0 10px 30px rgba(0,0,0,.22); }
+    .label { color:#90a8c1; font-size:11px; letter-spacing:.15em; text-transform:uppercase; }
+    #score { color:white; font-size:28px; font-weight:800; }
+    #status { position:absolute; left:18px; bottom:18px; z-index:10; max-width:min(430px,calc(100vw - 36px)); padding:10px 12px; border-radius:10px; background:var(--panel); color:#a8bdd3; font-size:12px; }
+    #status strong { color:var(--cyan); }
+    #menu, #gameOver { position:absolute; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:linear-gradient(rgba(3,9,20,.15),rgba(3,9,20,.72)); }
+    #gameOver { display:none; }
+    .card { width:min(460px,calc(100vw - 32px)); padding:24px; text-align:center; border:1px solid rgba(103,215,255,.28); border-radius:18px; background:rgba(5,13,28,.94); box-shadow:0 24px 80px rgba(0,0,0,.55); }
+    h1 { margin:0 0 8px; font-size:32px; }
+    .subtitle { margin:0 0 18px; color:#9eb2c8; line-height:1.45; }
+    .controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    button { border:1px solid rgba(103,215,255,.25); border-radius:10px; padding:12px 10px; background:linear-gradient(135deg,#67d7ff,#9a8cff); color:#07101f; font-weight:800; cursor:pointer; }
+    button.secondary { background:rgba(12,26,48,.95); color:#ddecf8; }
+    #gameOver h1 { color:#ff6d7a; }
+    #finalScore { font-size:48px; font-weight:900; }
+    @media (max-width:640px) { .controls{grid-template-columns:1fr}.hud-box{min-width:120px}.label{font-size:9px} }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="hud">
+      <div class="hud-box"><div class="label">Score</div><div id="score">0000</div></div>
+      <div class="hud-box" style="text-align:right"><div class="label">Dodged</div><div id="dodged" style="font-size:28px;font-weight:800">0</div></div>
+    </div>
+    <div id="status">Source: <strong>Waiting to start</strong></div>
 
-      * { box-sizing: border-box; }
-
-      html, body {
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        background: var(--bg);
-        color: var(--text);
-        font-family: Arial, Helvetica, sans-serif;
-        overflow: hidden;
-      }
-
-      #app {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-      }
-
-      canvas {
-        display: block;
-        width: 100%;
-        height: 100%;
-        background: radial-gradient(circle at center, #111827, #0b1020 42%, #070b14 100%);
-      }
-
-      .ui {
-        position: absolute;
-        top: 16px;
-        left: 16px;
-        z-index: 10;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        max-width: min(420px, calc(100vw - 32px));
-      }
-
-      .panel {
-        background: var(--panel);
-        border: 1px solid var(--panel-border);
-        border-radius: 14px;
-        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
-        padding: 12px 14px;
-        backdrop-filter: blur(8px);
-      }
-
-      h1 {
-        margin: 0 0 8px;
-        font-size: 18px;
-        letter-spacing: 0.04em;
-      }
-
-      .muted {
-        margin: 0;
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.5;
-      }
-
-      .controls {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-
-      input[type="file"] {
-        color: var(--text);
-        background: rgba(15, 23, 42, 0.8);
-        border: 1px solid var(--panel-border);
-        border-radius: 10px;
-        padding: 8px 10px;
-      }
-
-      button, input[type="text"] {
-        font: inherit;
-      }
-
-      button {
-        cursor: pointer;
-        border: none;
-        border-radius: 10px;
-        padding: 10px 14px;
-        background: linear-gradient(135deg, var(--accent), var(--accent-2));
-        color: #05111c;
-        font-weight: 700;
-      }
-
-      button.secondary {
-        background: rgba(15, 23, 42, 0.9);
-        color: var(--text);
-        border: 1px solid var(--panel-border);
-      }
-
-      .gyro-box {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-
-      .status {
-        margin-top: 4px;
-        color: var(--text);
-        font-size: 12px;
-        line-height: 1.5;
-      }
-
-      .status strong {
-        color: var(--accent);
-      }
-
-      @media (max-width: 640px) {
-        .ui {
-          top: 10px;
-          left: 10px;
-          right: 10px;
-          max-width: none;
-        }
-
-        .controls, .row {
-          flex-direction: column;
-          align-items: stretch;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <div class="ui">
-        <div class="panel">
-          <h1>STL Gyroscope Viewer</h1>
-          <p class="muted">Upload an STL file or keep the default cube. Rotation can come from device gyroscope or an ESP32 connected over USB.</p>
-        </div>
-
-        <div class="panel">
-          <div class="controls">
-            <input id="fileInput" type="file" accept=".stl,.STL" />
-            <button id="resetModelButton" class="secondary">Reset Model</button>
-          </div>
-        </div>
-
-        <div class="panel gyro-box">
-          <div class="row">
-            <button id="gyroDeviceButton">Use Device Gyroscope</button>
-            <button id="usbConnectButton">Connect USB</button>
-            <button id="usbDisconnectButton" class="secondary">Disconnect USB</button>
-          </div>
-
-          <div class="status" id="statusText">
-            Source: <strong>Default cube</strong>
-          </div>
+    <div id="menu">
+      <div class="card">
+        <h1>Biplane Dodge</h1>
+        <p class="subtitle">Tilt the MPU6050 / ESP32 to move the plane. Dodge incoming fire for as long as possible.</p>
+        <div class="controls">
+          <button id="startButton">Start Game</button>
+          <button id="deviceGyroButton" class="secondary">Use Phone Gyro</button>
+          <button id="usbButton" class="secondary">Connect ESP32 USB</button>
+          <button id="keyboardButton" class="secondary">Use Keyboard</button>
         </div>
       </div>
     </div>
 
-    <script type="module">
-      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
-      import { STLLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/STLLoader.js';
+    <div id="gameOver">
+      <div class="card">
+        <h1>Game Over</h1>
+        <div id="finalScore">0</div>
+        <p class="subtitle">Bullets avoided: <strong id="finalDodged">0</strong></p>
+        <button id="restartButton">Fly Again</button>
+      </div>
+    </div>
+  </div>
 
-      const app = document.getElementById('app');
-      const fileInput = document.getElementById('fileInput');
-      const resetModelButton = document.getElementById('resetModelButton');
-      const gyroDeviceButton = document.getElementById('gyroDeviceButton');
-      const usbConnectButton = document.getElementById('usbConnectButton');
-      const usbDisconnectButton = document.getElementById('usbDisconnectButton');
-      const statusText = document.getElementById('statusText');
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+    import { STLLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/STLLoader.js';
 
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x0b1020);
+    const app = document.getElementById('app');
+    const scoreElement = document.getElementById('score');
+    const dodgedElement = document.getElementById('dodged');
+    const statusElement = document.getElementById('status');
+    const menu = document.getElementById('menu');
+    const gameOverScreen = document.getElementById('gameOver');
 
-      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(0, 0, 180);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07101f);
+    scene.fog = new THREE.Fog(0x07101f, 110, 300);
 
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      app.appendChild(renderer.domElement);
+    const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 600);
+    camera.position.set(0, 0, 145);
 
-      const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-      scene.add(ambientLight);
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    app.appendChild(renderer.domElement);
 
-      const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
-      keyLight.position.set(60, 80, 100);
-      scene.add(keyLight);
+    scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x18243a, 2.2));
+    const key = new THREE.DirectionalLight(0xffffff, 2.4);
+    key.position.set(40,70,100);
+    scene.add(key);
 
-      const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.7);
-      rimLight.position.set(-50, -30, -60);
-      scene.add(rimLight);
+    const starGeometry = new THREE.BufferGeometry();
+    const starPositions = [];
+    for (let i=0;i<450;i++) starPositions.push((Math.random()-0.5)*260,(Math.random()-0.5)*170,-20-Math.random()*250);
+    starGeometry.setAttribute('position',new THREE.Float32BufferAttribute(starPositions,3));
+    scene.add(new THREE.Points(starGeometry,new THREE.PointsMaterial({color:0xaedcff,size:0.55})));
 
-      const rootGroup = new THREE.Group();
-      scene.add(rootGroup);
+    const planeRoot = new THREE.Group();
+    scene.add(planeRoot);
+    planeRoot.position.set(0,0,-18);
 
-      const defaultMaterial = new THREE.MeshPhongMaterial({
-        color: 0x8ec5ff,
-        emissive: 0x0d1d2b,
-        shininess: 80,
-        side: THREE.DoubleSide
-      });
+    let biplane = null;
+    let gameActive = false;
+    let score = 0;
+    let dodged = 0;
+    let startTime = 0;
+    let lastSpawn = 0;
+    let spawnInterval = 1050;
+    let bulletSpeed = 48;
+    let serialText = '';
+    let usbPort = null;
+    let usbReader = null;
+    const bullets = [];
 
-      const cube = new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40), defaultMaterial.clone());
-      cube.rotation.x = 0.6;
-      cube.rotation.y = 0.8;
-      rootGroup.add(cube);
+    const control = { x:0, y:0, roll:0, pitch:0, active:false };
+    const keys = { ArrowLeft:false, ArrowRight:false, ArrowUp:false, ArrowDown:false, a:false,d:false,w:false,s:false };
 
-      let currentMesh = cube;
-      let defaultCubeVisible = true;
+    function setStatus(text){ statusElement.innerHTML=text; }
 
-      const gyroState = {
-        roll: 0,
-        pitch: 0,
-        yaw: 0,
-        active: false
-      };
-
-      let usbPort = null;
-      let usbReader = null;
-      let usbBuffer = '';
-
-      function setStatus(text) {
-        statusText.innerHTML = text;
-      }
-
-      function resetModelToCube() {
-        if (currentMesh !== cube) {
-          rootGroup.remove(currentMesh);
-          currentMesh = cube;
-        }
-
-        cube.visible = true;
-        cube.rotation.set(0.6, 0.8, 0);
-        rootGroup.position.set(0, 0, 0);
-        rootGroup.rotation.set(0, 0, 0);
-        defaultCubeVisible = true;
-
-        setStatus('Source: <strong>Default cube</strong>');
-      }
-
-      function loadSTLFromBuffer(name, arrayBuffer) {
-        try {
-          const loader = new STLLoader();
-          const geometry = loader.parse(arrayBuffer);
+    function loadBiplane(){
+      const urls = [
+        './Glorious%20Borwo-Bombul.stl',
+        'https://raw.githubusercontent.com/Av65784/gyroscope/main/Glorious%20Borwo-Bombul.stl'
+      ];
+      const tryLoad = (index) => {
+        if(index>=urls.length){ setStatus('Source: <strong>STL unavailable - using fallback plane</strong>'); createFallbackPlane(); return; }
+        new STLLoader().load(urls[index], geometry => {
           geometry.computeVertexNormals();
-
-          if (currentMesh !== cube) {
-            rootGroup.remove(currentMesh);
-          }
-
-          const material = defaultMaterial.clone();
-          material.color = new THREE.Color(0x8ec5ff);
-
-          const mesh = new THREE.Mesh(geometry, material);
-
-          const box = new THREE.Box3().setFromBufferAttribute(geometry.attributes.position);
+          geometry.computeBoundingBox();
+          const box = geometry.boundingBox;
           const center = box.getCenter(new THREE.Vector3());
           const size = box.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z) || 1;
-          const scale = 100 / maxDim;
+          const maxSize = Math.max(size.x,size.y,size.z)||1;
+          const material = new THREE.MeshPhongMaterial({color:0x66cfff,emissive:0x071a29,shininess:80,side:THREE.DoubleSide});
+          biplane = new THREE.Mesh(geometry,material);
+          biplane.position.sub(center);
+          biplane.scale.setScalar(62/maxSize);
+          biplane.rotation.x = -Math.PI/2;
+          planeRoot.add(biplane);
+          setStatus('Source: <strong>Biplane STL loaded</strong>');
+        }, undefined, () => tryLoad(index+1));
+      };
+      tryLoad(0);
+    }
 
-          mesh.scale.setScalar(scale);
-          mesh.position.sub(center.multiplyScalar(scale));
-          mesh.rotation.x = -Math.PI / 2;
+    function createFallbackPlane(){
+      const group = new THREE.Group();
+      const material = new THREE.MeshPhongMaterial({color:0x66cfff,emissive:0x071a29,shininess:80});
+      const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(3,14,5,10),material); fuselage.rotation.x=Math.PI/2;
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(32,1.2,7),material); wing.position.z=2;
+      const lowerWing = wing.clone(); lowerWing.position.z=-6;
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(9,1,4),material); tail.position.z=-10;
+      group.add(fuselage,wing,lowerWing,tail);
+      biplane=group;
+      planeRoot.add(group);
+    }
 
-          rootGroup.add(mesh);
-          currentMesh = mesh;
-          cube.visible = false;
-          defaultCubeVisible = false;
+    // Ellipsoid hitbox remains conservative in world space.
+    const hitboxSize = new THREE.Vector3(24,10,16);
 
-          setStatus('Source: <strong>' + name + '</strong>');
-        } catch (err) {
-          console.error('STL parsing failed:', err);
-          alert('Could not load STL file. Please try another file.');
-          resetModelToCube();
-        }
-      }
+    function spawnBullet(){
+      const geometry = new THREE.SphereGeometry(2.2,10,8);
+      const material = new THREE.MeshStandardMaterial({color:0xff5364,emissive:0xff1836,emissiveIntensity:2,roughness:.25});
+      const bullet = new THREE.Mesh(geometry,material);
+      bullet.position.set((Math.random()-0.5)*82,(Math.random()-0.5)*48,-210);
+      scene.add(bullet);
+      bullets.push(bullet);
+    }
 
-      fileInput.addEventListener('change', (event) => {
-        const file = event.target.files && event.target.files[0];
-        if (!file) return;
+    function clearBullets(){
+      for(const bullet of bullets){ scene.remove(bullet); bullet.geometry.dispose(); bullet.material.dispose(); }
+      bullets.length=0;
+    }
 
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          loadSTLFromBuffer(file.name, e.target.result);
-        };
-        reader.readAsArrayBuffer(file);
-      });
+    function startGame(){
+      clearBullets();
+      score=0; dodged=0; spawnInterval=1050; bulletSpeed=48;
+      startTime=performance.now(); lastSpawn=startTime;
+      planeRoot.position.set(0,0,-18);
+      control.x=0; control.y=0;
+      menu.style.display='none'; gameOverScreen.style.display='none';
+      gameActive=true;
+      setStatus('Source: <strong>Game active</strong>');
+    }
 
-      resetModelButton.addEventListener('click', () => {
-        resetModelToCube();
-      });
+    function endGame(){
+      if(!gameActive)return;
+      gameActive=false;
+      document.getElementById('finalScore').textContent=String(Math.floor(score));
+      document.getElementById('finalDodged').textContent=String(dodged);
+      gameOverScreen.style.display='flex';
+      setStatus('Source: <strong>Game over</strong>');
+    }
 
-      function setGyroAnglesFromOrientation(beta, gamma, alpha = 0) {
-        if (beta === null || gamma === null) return;
+    function setGyroAngles(beta,gamma,alpha=0){
+      if(beta===null||gamma===null)return;
+      control.x=THREE.MathUtils.clamp(gamma/35,-1,1);
+      control.y=THREE.MathUtils.clamp(beta/35,-1,1);
+      control.roll=THREE.MathUtils.degToRad(gamma*.9);
+      control.pitch=THREE.MathUtils.degToRad(beta*.9);
+      control.active=true;
+    }
 
-        gyroState.roll = THREE.MathUtils.degToRad(beta * 0.9);
-        gyroState.pitch = THREE.MathUtils.degToRad(gamma * 0.9);
-        gyroState.yaw = THREE.MathUtils.degToRad(alpha * 0.35);
-        gyroState.active = true;
-      }
+    async function enableDeviceGyro(){
+      if(typeof DeviceOrientationEvent==='undefined'){setStatus('Source: <strong>Device gyro unsupported</strong>');return;}
+      const enable=()=>{
+        window.addEventListener('deviceorientation',event=>{
+          setGyroAngles(event.beta??0,event.gamma??0,event.alpha??0);
+          setStatus('Source: <strong>Phone gyroscope</strong>');
+        },true);
+      };
+      if(typeof DeviceOrientationEvent.requestPermission==='function'){
+        try{const result=await DeviceOrientationEvent.requestPermission(); if(result==='granted')enable(); else setStatus('Source: <strong>Gyro permission denied</strong>');}
+        catch{setStatus('Source: <strong>Gyro permission denied</strong>');}
+      }else enable();
+    }
 
-      function enableDeviceGyro() {
-        if (typeof DeviceOrientationEvent === 'undefined') {
-          setStatus('Source: <strong>Gyroscope not supported</strong>');
-          return;
-        }
-
-        const requestPermission = DeviceOrientationEvent.requestPermission;
-
-        const enable = () => {
-          window.addEventListener('deviceorientation', (event) => {
-            const beta = event.beta ?? 0;
-            const gamma = event.gamma ?? 0;
-            const alpha = event.alpha ?? 0;
-            setGyroAnglesFromOrientation(beta, gamma, alpha);
-            setStatus('Source: <strong>Device gyroscope</strong>');
-          }, true);
-
-          setStatus('Source: <strong>Device gyroscope</strong>');
-        };
-
-        if (typeof requestPermission === 'function') {
-          requestPermission()
-            .then((response) => {
-              if (response === 'granted') enable();
-              else setStatus('Source: <strong>Gyroscope permission denied</strong>');
-            })
-            .catch(() => setStatus('Source: <strong>Gyroscope permission denied</strong>'));
-        } else {
-          enable();
-        }
-      }
-
-      gyroDeviceButton.addEventListener('click', enableDeviceGyro);
-
-      async function connectUSB() {
-        if (!('serial' in navigator)) {
-          setStatus('Source: <strong>Web Serial unsupported in this browser</strong>');
-          return;
-        }
-
-        try {
-          usbPort = await navigator.serial.requestPort();
-          await usbPort.open({ baudRate: 115200 });
-
-          usbReader = usbPort.readable.getReader();
-
-          const decoder = new TextDecoder();
-
-          while (usbPort && usbPort.readable) {
-            const { value, done } = await usbReader.read();
-            if (done) break;
-
-            usbBuffer += decoder.decode(value, { stream: true });
-            const lines = usbBuffer.split(/\r?\n/);
-            usbBuffer = lines.pop() || '';
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed) continue;
-
-              try {
-                const obj = JSON.parse(trimmed);
-                const roll = Number(obj.roll ?? obj.x ?? 0);
-                const pitch = Number(obj.pitch ?? obj.y ?? 0);
-                const yaw = Number(obj.yaw ?? obj.z ?? 0);
-
-                gyroState.roll = THREE.MathUtils.degToRad(roll);
-                gyroState.pitch = THREE.MathUtils.degToRad(pitch);
-                gyroState.yaw = THREE.MathUtils.degToRad(yaw);
-                gyroState.active = true;
-                setStatus('Source: <strong>ESP32 USB</strong>');
-              } catch {
-                const parts = trimmed.split(',');
-                if (parts.length >= 3) {
-                  const roll = Number(parts[0]);
-                  const pitch = Number(parts[1]);
-                  const yaw = Number(parts[2]);
-
-                  gyroState.roll = THREE.MathUtils.degToRad(roll);
-                  gyroState.pitch = THREE.MathUtils.degToRad(pitch);
-                  gyroState.yaw = THREE.MathUtils.degToRad(yaw);
-                  gyroState.active = true;
-                  setStatus('Source: <strong>ESP32 USB</strong>');
-                }
-              }
+    async function connectUSB(){
+      if(!('serial' in navigator)){setStatus('Source: <strong>Web Serial unsupported</strong>');return;}
+      try{
+        usbPort=await navigator.serial.requestPort(); await usbPort.open({baudRate:115200}); usbReader=usbPort.readable.getReader();
+        const decoder=new TextDecoder();
+        setStatus('Source: <strong>ESP32 USB connecting</strong>');
+        while(usbPort&&usbPort.readable){
+          const {value,done}=await usbReader.read(); if(done)break;
+          serialText+=decoder.decode(value,{stream:true});
+          const lines=serialText.split(/\r?\n/); serialText=lines.pop()||'';
+          for(const line of lines){
+            const trimmed=line.trim(); if(!trimmed)continue;
+            let roll,pitch,yaw;
+            try{const obj=JSON.parse(trimmed); roll=Number(obj.roll??obj.x??0); pitch=Number(obj.pitch??obj.y??0); yaw=Number(obj.yaw??obj.z??0);}
+            catch{const parts=trimmed.split(','); if(parts.length<3)continue; [roll,pitch,yaw]=parts.map(Number);}
+            if([roll,pitch,yaw].every(Number.isFinite)){
+              control.x=THREE.MathUtils.clamp(pitch/35,-1,1);
+              control.y=THREE.MathUtils.clamp(roll/35,-1,1);
+              control.roll=THREE.MathUtils.degToRad(roll);
+              control.pitch=THREE.MathUtils.degToRad(pitch);
+              control.active=true;
+              setStatus('Source: <strong>ESP32 MPU6050 USB</strong>');
             }
           }
-        } catch (err) {
-          console.error('USB connection failed:', err);
-          setStatus('Source: <strong>USB connection failed</strong>');
         }
+      }catch(error){console.error(error);setStatus('Source: <strong>USB connection failed</strong>');}
+    }
+
+    async function disconnectUSB(){
+      if(usbReader){try{await usbReader.cancel();}catch{}usbReader=null;}
+      if(usbPort){try{await usbPort.close();}catch{}usbPort=null;}
+      setStatus('Source: <strong>USB disconnected</strong>');
+    }
+
+    function enableKeyboard(){
+      control.active=false;
+      setStatus('Source: <strong>Keyboard arrows / WASD</strong>');
+    }
+
+    document.getElementById('startButton').addEventListener('click',startGame);
+    document.getElementById('restartButton').addEventListener('click',startGame);
+    document.getElementById('deviceGyroButton').addEventListener('click',enableDeviceGyro);
+    document.getElementById('usbButton').addEventListener('click',connectUSB);
+    document.getElementById('keyboardButton').addEventListener('click',enableKeyboard);
+
+    window.addEventListener('keydown',event=>{
+      if(event.key in keys)keys[event.key]=true;
+    });
+    window.addEventListener('keyup',event=>{
+      if(event.key in keys)keys[event.key]=false;
+    });
+
+    function updateControls(){
+      if(!control.active){
+        control.x=0; control.y=0;
+        if(keys.ArrowLeft||keys.a)control.x=-1;
+        if(keys.ArrowRight||keys.d)control.x=1;
+        if(keys.ArrowUp||keys.w)control.y=1;
+        if(keys.ArrowDown||keys.s)control.y=-1;
       }
+      planeRoot.position.x+=(control.x*72-planeRoot.position.x)*.12;
+      planeRoot.position.y+=(control.y*-38-planeRoot.position.y)*.12;
+      planeRoot.position.x=THREE.MathUtils.clamp(planeRoot.position.x,-74,74);
+      planeRoot.position.y=THREE.MathUtils.clamp(planeRoot.position.y,-43,43);
+      planeRoot.rotation.z+=((-control.x*.32-planeRoot.rotation.z)*.12);
+      planeRoot.rotation.x+=(control.pitch*.45-planeRoot.rotation.x)*.08;
+      planeRoot.rotation.y+=(control.roll*.45-planeRoot.rotation.y)*.08;
+    }
 
-      async function disconnectUSB() {
-        if (usbReader) {
-          usbReader.cancel();
-          usbReader = null;
-        }
-
-        if (usbPort) {
-          try {
-            await usbPort.close();
-          } catch (err) {
-            console.warn('USB close warning:', err);
-          }
-          usbPort = null;
-        }
-
-        usbBuffer = '';
-        setStatus('Source: <strong>USB disconnected</strong>');
+    function updateBullets(delta,now){
+      if(gameActive&&now-lastSpawn>spawnInterval){spawnBullet();lastSpawn=now;spawnInterval=Math.max(300,spawnInterval*.985);bulletSpeed=Math.min(140,bulletSpeed+1.1);}
+      for(let i=bullets.length-1;i>=0;i--){
+        const bullet=bullets[i]; bullet.position.z+=bulletSpeed*delta; bullet.rotation.x+=delta*3; bullet.rotation.y+=delta*4;
+        const dx=bullet.position.x-planeRoot.position.x;
+        const dy=bullet.position.y-planeRoot.position.y;
+        const dz=bullet.position.z-planeRoot.position.z;
+        if(Math.abs(dx)<hitboxSize.x*.55&&Math.abs(dy)<hitboxSize.y*.9&&Math.abs(dz)<hitboxSize.z*.7){ endGame(); }
+        if(bullet.position.z>155){scene.remove(bullet);bullet.geometry.dispose();bullet.material.dispose();bullets.splice(i,1);dodged++;dodgedElement.textContent=String(dodged);}
       }
+    }
 
-      usbConnectButton.addEventListener('click', connectUSB);
-      usbDisconnectButton.addEventListener('click', disconnectUSB);
-
-      function animate() {
-        requestAnimationFrame(animate);
-
-        if (gyroState.active) {
-          const smoothing = 0.08;
-          rootGroup.rotation.x += (gyroState.roll - rootGroup.rotation.x) * smoothing;
-          rootGroup.rotation.y += (gyroState.pitch - rootGroup.rotation.y) * smoothing;
-          rootGroup.rotation.z += (gyroState.yaw - rootGroup.rotation.z) * smoothing;
-        } else {
-          rootGroup.rotation.x += 0.005;
-          rootGroup.rotation.y += 0.01;
-        }
-
-        renderer.render(scene, camera);
+    function animate(now){
+      requestAnimationFrame(animate);
+      const delta=Math.min((animate.lastNow?now-animate.lastNow:16)/1000,.05); animate.lastNow=now;
+      updateControls();
+      if(gameActive){
+        score=((now-startTime)/100)/10+dodged*25;
+        scoreElement.textContent=String(Math.floor(score)).padStart(4,'0');
       }
+      updateBullets(delta,now);
+      renderer.render(scene,camera);
+    }
 
-      function onResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      }
-
-      window.addEventListener('resize', onResize);
-      animate();
-      setStatus('Source: <strong>Default cube</strong>');
-    </script>
-  </body>
+    function onResize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
+    window.addEventListener('resize',onResize);
+    loadBiplane();
+    requestAnimationFrame(animate);
+  </script>
+</body>
 </html>

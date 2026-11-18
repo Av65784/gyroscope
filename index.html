@@ -5,380 +5,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gyro Biplane Dodge</title>
   <style>
-    :root { --cyan:#67d7ff; --panel:rgba(6,15,32,.92); }
-    * { box-sizing:border-box; }
-    html, body { width:100%; height:100%; margin:0; overflow:hidden; background:#07101f; color:#eef7ff; font-family:Arial,sans-serif; }
-    #app { position:relative; width:100%; height:100%; }
-    canvas { display:block; width:100%; height:100%; }
-    #hud { position:absolute; z-index:10; top:18px; left:18px; right:18px; display:flex; justify-content:space-between; pointer-events:none; }
-    .hud-box { min-width:145px; padding:10px 14px; border:1px solid rgba(103,215,255,.35); border-radius:12px; background:var(--panel); }
-    .label { color:#90a8c1; font-size:11px; letter-spacing:.15em; text-transform:uppercase; }
-    #score, #dodged { font-size:28px; font-weight:800; }
-    #status { position:absolute; z-index:10; left:18px; bottom:18px; max-width:calc(100vw - 36px); padding:10px 12px; border-radius:10px; background:var(--panel); color:#a8bdd3; font-size:12px; }
-    #status strong { color:var(--cyan); }
-    #menu, #gameOver { position:absolute; z-index:20; inset:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(rgba(3,9,20,.15),rgba(3,9,20,.72)); }
-    #gameOver { display:none; }
-    .card { width:min(460px,calc(100vw - 32px)); padding:24px; text-align:center; border:1px solid rgba(103,215,255,.35); border-radius:18px; background:rgba(5,13,28,.96); box-shadow:0 24px 80px rgba(0,0,0,.55); }
-    h1 { margin:0 0 8px; font-size:32px; }
-    .subtitle { margin:0 0 18px; color:#9eb2c8; line-height:1.45; }
-    .controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    button { border:1px solid rgba(103,215,255,.25); border-radius:10px; padding:12px 10px; background:linear-gradient(135deg,#67d7ff,#9a8cff); color:#07101f; font-weight:800; cursor:pointer; }
-    button.secondary { background:rgba(12,26,48,.95); color:#ddecf8; }
-    #gameOver h1 { color:#ff6d7a; }
-    #finalScore { font-size:48px; font-weight:900; }
-    @media (max-width:640px) { .controls { grid-template-columns:1fr; } .hud-box { min-width:120px; } }
+    :root{--cyan:#67d7ff;--panel:rgba(6,15,32,.92)}
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#07101f;color:#eef7ff;font-family:Arial,sans-serif}
+    #app{position:relative;width:100%;height:100%}canvas{display:block;width:100%;height:100%}
+    #hud{position:absolute;z-index:10;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;pointer-events:none}
+    .hud-box{min-width:145px;padding:10px 14px;border:1px solid rgba(103,215,255,.35);border-radius:12px;background:var(--panel)}
+    .label{color:#90a8c1;font-size:11px;letter-spacing:.15em;text-transform:uppercase}#score,#dodged{font-size:28px;font-weight:800}
+    #status{position:absolute;z-index:10;left:18px;bottom:18px;max-width:calc(100vw - 36px);padding:10px 12px;border-radius:10px;background:var(--panel);color:#a8bdd3;font-size:12px}#status strong{color:var(--cyan)}
+    #menu,#gameOver{position:absolute;z-index:20;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(3,9,20,.15),rgba(3,9,20,.72))}#gameOver{display:none}
+    .card{width:min(460px,calc(100vw - 32px));padding:24px;text-align:center;border:1px solid rgba(103,215,255,.35);border-radius:18px;background:rgba(5,13,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.55)}
+    h1{margin:0 0 8px;font-size:32px}.subtitle{margin:0 0 18px;color:#9eb2c8;line-height:1.45}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    button{border:1px solid rgba(103,215,255,.25);border-radius:10px;padding:12px 10px;background:linear-gradient(135deg,#67d7ff,#9a8cff);color:#07101f;font-weight:800;cursor:pointer}button.secondary{background:rgba(12,26,48,.95);color:#ddecf8}#gameOver h1{color:#ff6d7a}#finalScore{font-size:48px;font-weight:900}
+    @media(max-width:640px){.controls{grid-template-columns:1fr}.hud-box{min-width:120px}}
   </style>
+  <!-- STLLoader imports the bare module name "three". This import map must precede all module scripts. -->
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js"}}
+  </script>
 </head>
 <body>
   <div id="app">
-    <div id="hud">
-      <div class="hud-box"><div class="label">Score</div><div id="score">0000</div></div>
-      <div class="hud-box" style="text-align:right"><div class="label">Dodged</div><div id="dodged">0</div></div>
-    </div>
+    <div id="hud"><div class="hud-box"><div class="label">Score</div><div id="score">0000</div></div><div class="hud-box" style="text-align:right"><div class="label">Dodged</div><div id="dodged">0</div></div></div>
     <div id="status">Source: <strong>Loading game</strong></div>
-
-    <div id="menu">
-      <div class="card">
-        <h1>Biplane Dodge</h1>
-        <p class="subtitle">Tilt an MPU6050 connected to an Arduino Uno, use phone orientation, or use the keyboard.</p>
-        <div class="controls">
-          <button id="startButton">Start Game</button>
-          <button id="deviceGyroButton" class="secondary">Use Phone Gyro</button>
-          <button id="usbButton" class="secondary">Connect Arduino USB</button>
-          <button id="keyboardButton" class="secondary">Use Keyboard</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="gameOver">
-      <div class="card">
-        <h1>Game Over</h1>
-        <div id="finalScore">0</div>
-        <p class="subtitle">Bullets avoided: <strong id="finalDodged">0</strong></p>
-        <button id="restartButton">Fly Again</button>
-      </div>
-    </div>
+    <div id="menu"><div class="card"><h1>Biplane Dodge</h1><p class="subtitle">Tilt an MPU6050 connected to an Arduino Uno, use phone orientation, or use the keyboard.</p><div class="controls"><button id="startButton">Start Game</button><button id="deviceGyroButton" class="secondary">Use Phone Gyro</button><button id="usbButton" class="secondary">Connect Arduino USB</button><button id="keyboardButton" class="secondary">Use Keyboard</button></div></div></div>
+    <div id="gameOver"><div class="card"><h1>Game Over</h1><div id="finalScore">0</div><p class="subtitle">Bullets avoided: <strong id="finalDodged">0</strong></p><button id="restartButton">Fly Again</button></div></div>
   </div>
 
   <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+    import * as THREE from 'three';
     import { STLLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/STLLoader.js';
 
-    const app = document.getElementById('app');
-    const scoreElement = document.getElementById('score');
-    const dodgedElement = document.getElementById('dodged');
-    const statusElement = document.getElementById('status');
-    const menu = document.getElementById('menu');
-    const gameOverScreen = document.getElementById('gameOver');
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x07101f);
-    scene.fog = new THREE.Fog(0x07101f, 110, 300);
-
-    const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 600);
-    camera.position.set(0, 0, 145);
-
-    const renderer = new THREE.WebGLRenderer({ antialias:true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.setSize(innerWidth, innerHeight);
-    app.appendChild(renderer.domElement);
-
-    scene.add(new THREE.HemisphereLight(0xbfe6ff, 0x18243a, 2.2));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
-    keyLight.position.set(40, 70, 100);
-    scene.add(keyLight);
-
-    const starGeometry = new THREE.BufferGeometry();
-    const starPositions = [];
-    for (let i = 0; i < 450; i++) {
-      starPositions.push((Math.random() - 0.5) * 260, (Math.random() - 0.5) * 170, -20 - Math.random() * 250);
-    }
-    starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-    scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({ color:0xaedcff, size:0.55 })));
-
-    const planeRoot = new THREE.Group();
-    planeRoot.position.set(0, 0, -18);
-    scene.add(planeRoot);
-
-    let gameActive = false;
-    let score = 0;
-    let dodged = 0;
-    let startTime = 0;
-    let lastSpawn = 0;
-    let spawnInterval = 1050;
-    let bulletSpeed = 48;
-    let serialText = '';
-    let usbPort = null;
-    let usbReader = null;
-    const bullets = [];
-
-    const control = { x:0, y:0, roll:0, pitch:0, active:false };
-    const keys = { ArrowLeft:false, ArrowRight:false, ArrowUp:false, ArrowDown:false, a:false, d:false, w:false, s:false };
-
-    function setStatus(text) { statusElement.innerHTML = text; }
-
-    function createFallbackPlane() {
-      const group = new THREE.Group();
-      const material = new THREE.MeshPhongMaterial({ color:0x66cfff, emissive:0x071a29, shininess:80 });
-      const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(3,14,5,10), material);
-      fuselage.rotation.x = Math.PI / 2;
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(32,1.2,7), material);
-      wing.position.z = 2;
-      const lowerWing = wing.clone(); lowerWing.position.z = -6;
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(9,1,4), material);
-      tail.position.z = -10;
-      group.add(fuselage, wing, lowerWing, tail);
-      planeRoot.add(group);
-    }
-
-    function loadBiplane() {
-      const loader = new STLLoader();
-      const modelUrl = './Glorious%20Borwo-Bombul.stl';
-      loader.load(modelUrl, geometry => {
-        geometry.computeVertexNormals();
-        geometry.computeBoundingBox();
-        const box = geometry.boundingBox;
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxSize = Math.max(size.x, size.y, size.z) || 1;
-        const material = new THREE.MeshPhongMaterial({ color:0x66cfff, emissive:0x071a29, shininess:80, side:THREE.DoubleSide });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.sub(center);
-        mesh.scale.setScalar(62 / maxSize);
-        mesh.rotation.x = -Math.PI / 2;
-        planeRoot.add(mesh);
-        setStatus('Source: <strong>Biplane STL loaded</strong>');
-      }, undefined, () => {
-        console.warn('Biplane STL could not be loaded; using fallback plane');
-        createFallbackPlane();
-        setStatus('Source: <strong>Fallback plane</strong>');
-      });
-    }
-
-    const hitboxSize = new THREE.Vector3(24, 10, 16);
-
-    function spawnBullet() {
-      const geometry = new THREE.SphereGeometry(2.2, 10, 8);
-      const material = new THREE.MeshStandardMaterial({ color:0xff5364, emissive:0xff1836, emissiveIntensity:2 });
-      const bullet = new THREE.Mesh(geometry, material);
-      bullet.position.set((Math.random() - 0.5) * 82, (Math.random() - 0.5) * 48, -210);
-      scene.add(bullet);
-      bullets.push(bullet);
-    }
-
-    function clearBullets() {
-      for (const bullet of bullets) {
-        scene.remove(bullet);
-        bullet.geometry.dispose();
-        bullet.material.dispose();
-      }
-      bullets.length = 0;
-    }
-
-    function startGame() {
-      clearBullets();
-      score = 0;
-      dodged = 0;
-      spawnInterval = 1050;
-      bulletSpeed = 48;
-      startTime = performance.now();
-      lastSpawn = startTime;
-      planeRoot.position.set(0, 0, -18);
-      dodgedElement.textContent = '0';
-      menu.style.display = 'none';
-      gameOverScreen.style.display = 'none';
-      gameActive = true;
-      setStatus('Source: <strong>Game active</strong>');
-    }
-
-    function endGame() {
-      if (!gameActive) return;
-      gameActive = false;
-      document.getElementById('finalScore').textContent = String(Math.floor(score));
-      document.getElementById('finalDodged').textContent = String(dodged);
-      gameOverScreen.style.display = 'flex';
-      setStatus('Source: <strong>Game over</strong>');
-    }
-
-    function setGyroAngles(beta, gamma) {
-      if (beta === null || gamma === null) return;
-      control.x = THREE.MathUtils.clamp(gamma / 35, -1, 1);
-      control.y = THREE.MathUtils.clamp(beta / 35, -1, 1);
-      control.roll = THREE.MathUtils.degToRad(gamma * 0.9);
-      control.pitch = THREE.MathUtils.degToRad(beta * 0.9);
-      control.active = true;
-    }
-
-    async function enableDeviceGyro() {
-      if (typeof DeviceOrientationEvent === 'undefined') {
-        setStatus('Source: <strong>Device gyro unsupported</strong>');
-        return;
-      }
-      const enable = () => {
-        window.addEventListener('deviceorientation', event => {
-          setGyroAngles(event.beta ?? 0, event.gamma ?? 0);
-          setStatus('Source: <strong>Phone gyroscope</strong>');
-        }, true);
-      };
-      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-          const result = await DeviceOrientationEvent.requestPermission();
-          result === 'granted' ? enable() : setStatus('Source: <strong>Gyro permission denied</strong>');
-        } catch { setStatus('Source: <strong>Gyro permission denied</strong>'); }
-      } else enable();
-    }
-
-    async function connectUSB() {
-      if (!('serial' in navigator)) {
-        setStatus('Source: <strong>Web Serial unsupported - use Chrome or Edge</strong>');
-        return;
-      }
-      try {
-        usbPort = await navigator.serial.requestPort();
-        await usbPort.open({ baudRate:115200 });
-        usbReader = usbPort.readable.getReader();
-        const decoder = new TextDecoder();
-        setStatus('Source: <strong>Arduino USB connecting</strong>');
-
-        while (usbPort && usbPort.readable) {
-          const { value, done } = await usbReader.read();
-          if (done) break;
-          serialText += decoder.decode(value, { stream:true });
-          const lines = serialText.split(/\r?\n/);
-          serialText = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-
-            let roll, pitch;
-            try {
-              const obj = JSON.parse(trimmed);
-              roll = Number(obj.roll ?? obj.x ?? 0);
-              pitch = Number(obj.pitch ?? obj.y ?? 0);
-            } catch {
-              const parts = trimmed.split(',');
-              if (parts.length < 2) continue;
-              roll = Number(parts[0]);
-              pitch = Number(parts[1]);
-            }
-
-            if (Number.isFinite(roll) && Number.isFinite(pitch)) {
-              control.x = THREE.MathUtils.clamp(pitch / 35, -1, 1);
-              control.y = THREE.MathUtils.clamp(roll / 35, -1, 1);
-              control.roll = THREE.MathUtils.degToRad(roll);
-              control.pitch = THREE.MathUtils.degToRad(pitch);
-              control.active = true;
-              setStatus('Source: <strong>Arduino Uno MPU6050 USB</strong>');
-            }
-          }
-        }
-      } catch (error) {
-        console.error(error);
-        setStatus('Source: <strong>USB connection failed</strong>');
-      }
-    }
-
-    async function disconnectUSB() {
-      if (usbReader) { try { await usbReader.cancel(); } catch {} usbReader = null; }
-      if (usbPort) { try { await usbPort.close(); } catch {} usbPort = null; }
-      serialText = '';
-      setStatus('Source: <strong>USB disconnected</strong>');
-    }
-
-    function enableKeyboard() {
-      control.active = false;
-      setStatus('Source: <strong>Keyboard arrows / WASD</strong>');
-    }
-
-    document.getElementById('startButton').addEventListener('click', startGame);
-    document.getElementById('restartButton').addEventListener('click', startGame);
-    document.getElementById('deviceGyroButton').addEventListener('click', enableDeviceGyro);
-    document.getElementById('usbButton').addEventListener('click', connectUSB);
-    document.getElementById('keyboardButton').addEventListener('click', enableKeyboard);
-
-    window.addEventListener('keydown', event => { if (event.key in keys) keys[event.key] = true; });
-    window.addEventListener('keyup', event => { if (event.key in keys) keys[event.key] = false; });
-
-    function updateControls() {
-      if (!control.active) {
-        control.x = 0; control.y = 0;
-        if (keys.ArrowLeft || keys.a) control.x = -1;
-        if (keys.ArrowRight || keys.d) control.x = 1;
-        if (keys.ArrowUp || keys.w) control.y = 1;
-        if (keys.ArrowDown || keys.s) control.y = -1;
-      }
-
-      planeRoot.position.x += (control.x * 72 - planeRoot.position.x) * 0.12;
-      planeRoot.position.y += (control.y * -38 - planeRoot.position.y) * 0.12;
-      planeRoot.position.x = THREE.MathUtils.clamp(planeRoot.position.x, -74, 74);
-      planeRoot.position.y = THREE.MathUtils.clamp(planeRoot.position.y, -43, 43);
-      planeRoot.rotation.z += (-control.x * 0.32 - planeRoot.rotation.z) * 0.12;
-      planeRoot.rotation.x += (control.pitch * 0.45 - planeRoot.rotation.x) * 0.08;
-      planeRoot.rotation.y += (control.roll * 0.45 - planeRoot.rotation.y) * 0.08;
-    }
-
-    function updateBullets(delta, now) {
-      if (gameActive && now - lastSpawn > spawnInterval) {
-        spawnBullet();
-        lastSpawn = now;
-        spawnInterval = Math.max(300, spawnInterval * 0.985);
-        bulletSpeed = Math.min(140, bulletSpeed + 1.1);
-      }
-
-      for (let i = bullets.length - 1; i >= 0; i--) {
-        const bullet = bullets[i];
-        bullet.position.z += bulletSpeed * delta;
-        bullet.rotation.x += delta * 3;
-        bullet.rotation.y += delta * 4;
-
-        const dx = bullet.position.x - planeRoot.position.x;
-        const dy = bullet.position.y - planeRoot.position.y;
-        const dz = bullet.position.z - planeRoot.position.z;
-
-        if (Math.abs(dx) < hitboxSize.x * 0.55 &&
-            Math.abs(dy) < hitboxSize.y * 0.9 &&
-            Math.abs(dz) < hitboxSize.z * 0.7) {
-          endGame();
-        }
-
-        if (bullet.position.z > 155) {
-          scene.remove(bullet);
-          bullet.geometry.dispose();
-          bullet.material.dispose();
-          bullets.splice(i, 1);
-          dodged++;
-          dodgedElement.textContent = String(dodged);
-        }
-      }
-    }
-
-    let previousTime = performance.now();
-    function animate(now) {
-      requestAnimationFrame(animate);
-      const delta = Math.min((now - previousTime) / 1000, 0.05);
-      previousTime = now;
-      updateControls();
-
-      if (gameActive) {
-        score = ((now - startTime) / 100) / 10 + dodged * 25;
-        scoreElement.textContent = String(Math.floor(score)).padStart(4, '0');
-      }
-
-      updateBullets(delta, now);
-      renderer.render(scene, camera);
-    }
-
-    function onResize() {
-      camera.aspect = innerWidth / innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
-    }
-
-    window.addEventListener('resize', onResize);
-    loadBiplane();
-    setStatus('Source: <strong>Ready - press Start Game</strong>');
-    requestAnimationFrame(animate);
+    const app=document.getElementById('app'), statusEl=document.getElementById('status');
+    const scene=new THREE.Scene(); scene.background=new THREE.Color(0x07101f); scene.fog=new THREE.Fog(0x07101f,110,300);
+    const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.1,600); camera.position.set(0,0,145);
+    const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); app.appendChild(renderer.domElement);
+    scene.add(new THREE.HemisphereLight(0xbfe6ff,0x18243a,2.2)); const keyLight=new THREE.DirectionalLight(0xffffff,2.4); keyLight.position.set(40,70,100); scene.add(keyLight);
+    const stars=new THREE.BufferGeometry(), starPositions=[]; for(let i=0;i<450;i++)starPositions.push((Math.random()-.5)*260,(Math.random()-.5)*170,-20-Math.random()*250); stars.setAttribute('position',new THREE.Float32BufferAttribute(starPositions,3)); scene.add(new THREE.Points(stars,new THREE.PointsMaterial({color:0xaedcff,size:.55})));
+    const plane=new THREE.Group(); plane.position.set(0,0,-18); scene.add(plane);
+    let gameActive=false, score=0, dodged=0, startTime=0, lastSpawn=0, spawnInterval=1050, bulletSpeed=48, serialText='', usbPort=null, usbReader=null;
+    const bullets=[], input={x:0,y:0,roll:0,pitch:0,active:false}, keys={ArrowLeft:false,ArrowRight:false,ArrowUp:false,ArrowDown:false,a:false,d:false,w:false,s:false};
+    const hitbox=new THREE.Vector3(24,10,16);
+    function setStatus(s){statusEl.innerHTML=s}
+    function fallbackPlane(){const g=new THREE.Group(),m=new THREE.MeshPhongMaterial({color:0x66cfff,emissive:0x071a29,shininess:80});const f=new THREE.Mesh(new THREE.CapsuleGeometry(3,14,5,10),m);f.rotation.x=Math.PI/2;const w=new THREE.Mesh(new THREE.BoxGeometry(32,1.2,7),m);w.position.z=2;const w2=w.clone();w2.position.z=-6;const t=new THREE.Mesh(new THREE.BoxGeometry(9,1,4),m);t.position.z=-10;g.add(f,w,w2,t);plane.add(g)}
+    function loadPlane(){new STLLoader().load('./Glorious%20Borwo-Bombul.stl',g=>{g.computeVertexNormals();g.computeBoundingBox();const center=g.boundingBox.getCenter(new THREE.Vector3()),size=g.boundingBox.getSize(new THREE.Vector3()),mesh=new THREE.Mesh(g,new THREE.MeshPhongMaterial({color:0x66cfff,emissive:0x071a29,shininess:80,side:THREE.DoubleSide}));mesh.position.sub(center);mesh.scale.setScalar(62/(Math.max(size.x,size.y,size.z)||1));mesh.rotation.x=-Math.PI/2;plane.add(mesh);setStatus('Source: <strong>Biplane STL loaded</strong>')},undefined,()=>{fallbackPlane();setStatus('Source: <strong>Fallback plane</strong>')})}
+    function spawnBullet(){const b=new THREE.Mesh(new THREE.SphereGeometry(2.2,10,8),new THREE.MeshStandardMaterial({color:0xff5364,emissive:0xff1836,emissiveIntensity:2}));b.position.set((Math.random()-.5)*82,(Math.random()-.5)*48,-210);scene.add(b);bullets.push(b)}
+    function clearBullets(){for(const b of bullets){scene.remove(b);b.geometry.dispose();b.material.dispose()}bullets.length=0}
+    function startGame(){clearBullets();score=0;dodged=0;spawnInterval=1050;bulletSpeed=48;startTime=performance.now();lastSpawn=startTime;plane.position.set(0,0,-18);document.getElementById('dodged').textContent='0';document.getElementById('menu').style.display='none';document.getElementById('gameOver').style.display='none';gameActive=true;setStatus('Source: <strong>Game active</strong>')}
+    function endGame(){if(!gameActive)return;gameActive=false;document.getElementById('finalScore').textContent=String(Math.floor(score));document.getElementById('finalDodged').textContent=String(dodged);document.getElementById('gameOver').style.display='flex';setStatus('Source: <strong>Game over</strong>')}
+    function setAngles(beta,gamma){if(beta==null||gamma==null)return;input.x=THREE.MathUtils.clamp(gamma/35,-1,1);input.y=THREE.MathUtils.clamp(beta/35,-1,1);input.roll=THREE.MathUtils.degToRad(gamma*.9);input.pitch=THREE.MathUtils.degToRad(beta*.9);input.active=true}
+    async function enablePhone(){if(typeof DeviceOrientationEvent==='undefined'){setStatus('Source: <strong>Device gyro unsupported</strong>');return}const enable=()=>window.addEventListener('deviceorientation',e=>{setAngles(e.beta??0,e.gamma??0);setStatus('Source: <strong>Phone gyroscope</strong>')},true);if(typeof DeviceOrientationEvent.requestPermission==='function'){try{(await DeviceOrientationEvent.requestPermission())==='granted'?enable():setStatus('Source: <strong>Gyro permission denied</strong>')}catch{setStatus('Source: <strong>Gyro permission denied</strong>')}}else enable()}
+    async function connectUSB(){if(!('serial'in navigator)){setStatus('Source: <strong>Web Serial unsupported - use Chrome or Edge on localhost/HTTPS</strong>');return}try{usbPort=await navigator.serial.requestPort();await usbPort.open({baudRate:115200});usbReader=usbPort.readable.getReader();const decoder=new TextDecoder();setStatus('Source: <strong>Arduino USB connecting</strong>');while(usbPort&&usbPort.readable){const {value,done}=await usbReader.read();if(done)break;serialText+=decoder.decode(value,{stream:true});const lines=serialText.split(/\r?\n/);serialText=lines.pop()||'';for(const line of lines){const t=line.trim();if(!t)continue;let r,p;try{const o=JSON.parse(t);r=Number(o.roll??o.x??0);p=Number(o.pitch??o.y??0)}catch{const parts=t.split(',');if(parts.length<2)continue;r=Number(parts[0]);p=Number(parts[1])}if(Number.isFinite(r)&&Number.isFinite(p)){input.x=THREE.MathUtils.clamp(p/35,-1,1);input.y=THREE.MathUtils.clamp(r/35,-1,1);input.roll=THREE.MathUtils.degToRad(r);input.pitch=THREE.MathUtils.degToRad(p);input.active=true;setStatus('Source: <strong>Arduino Uno MPU6050 USB</strong>')}}}}catch(e){console.error(e);setStatus('Source: <strong>USB connection failed</strong>')}}
+    function keyboard(){input.active=false;setStatus('Source: <strong>Keyboard arrows / WASD</strong>')}
+    document.getElementById('startButton').addEventListener('click',startGame);document.getElementById('restartButton').addEventListener('click',startGame);document.getElementById('deviceGyroButton').addEventListener('click',enablePhone);document.getElementById('usbButton').addEventListener('click',connectUSB);document.getElementById('keyboardButton').addEventListener('click',keyboard);
+    window.addEventListener('keydown',e=>{if(e.key in keys)keys[e.key]=true});window.addEventListener('keyup',e=>{if(e.key in keys)keys[e.key]=false});
+    function updateControls(){if(!input.active){input.x=0;input.y=0;if(keys.ArrowLeft||keys.a)input.x=-1;if(keys.ArrowRight||keys.d)input.x=1;if(keys.ArrowUp||keys.w)input.y=1;if(keys.ArrowDown||keys.s)input.y=-1}plane.position.x+=(input.x*72-plane.position.x)*.12;plane.position.y+=(input.y*-38-plane.position.y)*.12;plane.position.x=THREE.MathUtils.clamp(plane.position.x,-74,74);plane.position.y=THREE.MathUtils.clamp(plane.position.y,-43,43);plane.rotation.z+=(-input.x*.32-plane.rotation.z)*.12;plane.rotation.x+=(input.pitch*.45-plane.rotation.x)*.08;plane.rotation.y+=(input.roll*.45-plane.rotation.y)*.08}
+    function updateBullets(dt,now){if(gameActive&&now-lastSpawn>spawnInterval){spawnBullet();lastSpawn=now;spawnInterval=Math.max(300,spawnInterval*.985);bulletSpeed=Math.min(140,bulletSpeed+1.1)}for(let i=bullets.length-1;i>=0;i--){const b=bullets[i];b.position.z+=bulletSpeed*dt;b.rotation.x+=dt*3;b.rotation.y+=dt*4;const dx=b.position.x-plane.position.x,dy=b.position.y-plane.position.y,dz=b.position.z-plane.position.z;if(gameActive&&Math.abs(dx)<hitbox.x*.55&&Math.abs(dy)<hitbox.y*.9&&Math.abs(dz)<hitbox.z*.7)endGame();if(b.position.z>155){scene.remove(b);b.geometry.dispose();b.material.dispose();bullets.splice(i,1);if(gameActive){dodged++;document.getElementById('dodged').textContent=String(dodged)}}}}
+    let previousTime=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-previousTime)/1000,.05);previousTime=now;updateControls();if(gameActive){score=(now-startTime)/1000+dodged*25;document.getElementById('score').textContent=String(Math.floor(score)).padStart(4,'0')}updateBullets(dt,now);renderer.render(scene,camera)}
+    window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+    loadPlane();setStatus('Source: <strong>Ready - press Start Game</strong>');requestAnimationFrame(animate);
   </script>
 </body>
 </html>
